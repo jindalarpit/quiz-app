@@ -145,12 +145,10 @@ podman exec -it quiz-redis redis-cli
 - All images use Alpine variants for smaller footprint
 - Services run as non-root users inside containers
 
-## Architecture
+## Documentation
 
-See `.kiro/specs/realtime-quiz-platform/design.md` for the full technical design including:
-- High-level architecture diagram
-- Service decomposition
-- Database schema
-- Redis data structures
-- WebSocket scaling strategy
-- Kubernetes deployment architecture
+Detailed technical documentation is available in the [`docs/`](docs/) folder:
+
+- [Architecture](docs/ARCHITECTURE.md) — High-level architecture, service decomposition, WebSocket scaling strategy, Kubernetes deployment, correctness properties
+- [API Reference](docs/API.md) — All service endpoints, WebSocket events, authentication, rate limiting
+- [Database Schema](docs/DATABASE.md) — PostgreSQL schema, Redis data structures, Pub/Sub channels
