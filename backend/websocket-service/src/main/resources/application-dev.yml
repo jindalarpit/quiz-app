@@ -1,0 +1,24 @@
+# WebSocket Service - Development Profile
+# Local development settings with relaxed security and debug logging
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+websocket:
+  max-connections: 100
+  heartbeat-interval-ms: 15000
+  allowed-origins: "*"
+
+cors:
+  allowed-origins: "*"
+  allowed-methods: "*"
+  allowed-headers: "*"
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+    org.springframework.web.socket: DEBUG
+    io.lettuce.core: DEBUG

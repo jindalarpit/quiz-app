@@ -1,0 +1,17 @@
+spring:
+  cloud:
+    gateway:
+      httpclient:
+        response-timeout: 30s
+
+gateway:
+  cors:
+    allowed-origins: "*"
+  rate-limit:
+    authenticated-requests-per-minute: 100
+    unauthenticated-requests-per-minute: 20
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+    org.springframework.cloud.gateway: DEBUG

@@ -1,0 +1,66 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      httpclient:
+        response-timeout: 30s
+        connect-timeout: 5000
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/auth/**
+        - id: quiz-service
+          uri: ${QUIZ_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/quizzes/**
+        - id: session-service
+          uri: ${SESSION_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/sessions/**
+        - id: analytics-service
+          uri: ${ANALYTICS_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/analytics/**
+        - id: websocket-service
+          uri: ${WEBSOCKET_SERVICE_URL:ws://localhost:8084}
+          predicates:
+            - Path=/ws/**
+          metadata:
+            response-timeout: -1
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+jwt:
+  secret: ${JWT_SECRET:defaultSecretKeyForDevelopmentOnlyDoNotUseInProduction123456}
+
+gateway:
+  rate-limit:
+    authenticated-requests-per-minute: ${RATE_LIMIT_AUTH:100}
+    unauthenticated-requests-per-minute: ${RATE_LIMIT_UNAUTH:20}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+  pattern:
+    console: '{"timestamp":"%d{ISO8601}","level":"%level","service":"${spring.application.name}","logger":"%logger{36}","message":"%msg"}%n'

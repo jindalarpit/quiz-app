@@ -1,0 +1,43 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+.idea/
+*.iml
+.settings/
+.classpath
+.project
+
+# Node
+node_modules/
+.next/
+out/
+.env.local
+.env.*.local
+
+# Podman/Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.kiro/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+*.env.local
+
+# Build artifacts
+dist/
+build/
+
+# Test
+coverage/
+*.lcov

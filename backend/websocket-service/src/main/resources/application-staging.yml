@@ -1,0 +1,24 @@
+# WebSocket Service - Staging Profile
+# Environment variable-based connections, INFO logging, moderate security
+
+spring:
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+
+websocket:
+  max-connections: 5000
+  heartbeat-interval-ms: 15000
+  allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:https://staging.quizplatform.com}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://staging.quizplatform.com}
+  allowed-methods: GET,POST,OPTIONS
+  allowed-headers: Authorization,Content-Type,X-Correlation-ID
+
+logging:
+  level:
+    com.quizplatform: INFO
+    org.springframework.web.socket: INFO
+    io.lettuce.core: WARN

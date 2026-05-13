@@ -1,0 +1,58 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: analytics-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/quizplatform}
+    username: ${SPRING_DATASOURCE_USERNAME:quiz}
+    password: ${SPRING_DATASOURCE_PASSWORD:quiz_dev_password}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    schemas: analytics
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+services:
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8080}
+  quiz-service:
+    url: ${QUIZ_SERVICE_URL:http://localhost:8081}
+  session-service:
+    url: ${SESSION_SERVICE_URL:http://localhost:8082}
+
+jwt:
+  secret: ${JWT_SECRET:dev-secret-key-change-in-production-min-32-chars}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+  pattern:
+    console: '{"timestamp":"%d{ISO8601}","level":"%level","service":"${spring.application.name}","logger":"%logger{36}","message":"%msg"}%n'

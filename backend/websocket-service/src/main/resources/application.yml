@@ -1,0 +1,57 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: websocket-service
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+websocket:
+  allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:*}
+
+jwt:
+  secret: ${JWT_SECRET:dev-secret-key-change-in-production-min-32-chars}
+
+services:
+  session-service:
+    url: ${SESSION_SERVICE_URL:http://localhost:8082}
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8080}
+  quiz-service:
+    url: ${QUIZ_SERVICE_URL:http://localhost:8081}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      sessionService:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.RestClientException
+          - java.io.IOException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+  pattern:
+    console: '{"timestamp":"%d{ISO8601}","level":"%level","service":"${spring.application.name}","logger":"%logger{36}","message":"%msg"}%n'

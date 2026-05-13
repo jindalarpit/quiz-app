@@ -1,0 +1,17 @@
+spring:
+  cloud:
+    gateway:
+      httpclient:
+        response-timeout: 30s
+
+gateway:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://staging.quizplatform.com}
+  rate-limit:
+    authenticated-requests-per-minute: 100
+    unauthenticated-requests-per-minute: 20
+
+logging:
+  level:
+    com.quizplatform: INFO
+    org.springframework.cloud.gateway: WARN

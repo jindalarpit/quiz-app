@@ -1,0 +1,32 @@
+# Session Service - Development Profile
+# Local development settings with relaxed security and debug logging
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/quizplatform
+    username: quiz
+    password: quiz_dev_password
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+cors:
+  allowed-origins: "*"
+  allowed-methods: "*"
+  allowed-headers: "*"
+
+logging:
+  level:
+    com.quizplatform: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    io.lettuce.core: DEBUG

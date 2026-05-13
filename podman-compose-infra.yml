@@ -1,0 +1,47 @@
+# Minimal infrastructure for local development
+# Only PostgreSQL and Redis - run services from your IDE
+#
+# Start:  podman-compose -f podman-compose-infra.yml up -d
+# Stop:   podman-compose -f podman-compose-infra.yml down
+# Status: podman-compose -f podman-compose-infra.yml ps
+
+services:
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    container_name: quiz-postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: quizplatform
+      POSTGRES_USER: quiz
+      POSTGRES_PASSWORD: quiz_dev_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/podman/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quiz -d quizplatform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: quiz-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
