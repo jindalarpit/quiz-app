@@ -55,7 +55,7 @@ export function ParticipantLeaderboard({ view, nickname }: ParticipantLeaderboar
   );
 }
 
-function NeighborRow({ entry, position }: { entry: LeaderboardEntry; position: 'above' | 'below' }) {
+function NeighborRow({ entry }: { entry: LeaderboardEntry; position: 'above' | 'below' }) {
   return (
     <div
       className={cn(

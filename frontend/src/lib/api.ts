@@ -154,12 +154,17 @@ class ApiClient {
       } as ApiError;
     }
 
-    // Handle 204 No Content
+    // Handle 204 No Content or empty body
     if (response.status === 204) {
       return undefined as T;
     }
 
-    return response.json();
+    const text = await response.text();
+    if (!text) {
+      return undefined as T;
+    }
+
+    return JSON.parse(text);
   }
 
   get<T>(endpoint: string): Promise<T> {

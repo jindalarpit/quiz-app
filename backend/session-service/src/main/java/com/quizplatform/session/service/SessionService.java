@@ -1,10 +1,12 @@
 package com.quizplatform.session.service;
 
+import com.quizplatform.common.dto.QuestionDTO;
 import com.quizplatform.common.exception.DuplicateResourceException;
 import com.quizplatform.common.exception.ForbiddenException;
 import com.quizplatform.common.exception.ResourceNotFoundException;
 import com.quizplatform.common.exception.SessionFullException;
 import com.quizplatform.common.exception.ValidationException;
+import com.quizplatform.session.client.QuizServiceClient;
 import com.quizplatform.session.dto.CreateSessionRequest;
 import com.quizplatform.session.dto.JoinSessionRequest;
 import com.quizplatform.session.dto.LeaderboardEntry;
@@ -40,6 +42,7 @@ public class SessionService {
     private final SessionRepository sessionRepository;
     private final SessionParticipantRepository sessionParticipantRepository;
     private final StringRedisTemplate redisTemplate;
+    private final QuizServiceClient quizServiceClient;
 
     /**
      * Start a new session: generate PIN, store in Redis, return response.
@@ -156,11 +159,38 @@ public class SessionService {
         stateMachine.validateTransition(current, SessionStatus.QUESTION_OPEN);
 
         redisSessionService.updateSessionState(pin, SessionStatus.QUESTION_OPEN.name());
+
+        // Get current question index (0-based) before incrementing
+        int questionIndex = redisSessionService.getCurrentQuestionIndex(pin);
         redisSessionService.incrementQuestionIndex(pin);
+
+        // Set question timing
+        long startTime = System.currentTimeMillis();
+        int durationMs = redisSessionService.getQuestionDurationMs(pin);
+        redisSessionService.setQuestionTiming(pin, startTime, durationMs);
+
+        // Fetch question from quiz service and broadcast
+        Map<Object, Object> sessionFields = redisSessionService.getSessionFields(pin);
+        String quizIdStr = sessionFields.get("quiz_id") != null ? sessionFields.get("quiz_id").toString() : null;
+        if (quizIdStr != null) {
+            try {
+                UUID quizId = UUID.fromString(quizIdStr);
+                List<QuestionDTO> questions = quizServiceClient.getQuestions(quizId);
+                if (questions != null && questionIndex < questions.size()) {
+                    QuestionDTO question = questions.get(questionIndex);
+                    // Store correct answer for scoring
+                    redisSessionService.storeCorrectAnswer(pin, questionIndex, question.getCorrectAnswer());
+                    // Broadcast question.start event
+                    publishQuestionStartEvent(pin, question, durationMs, startTime);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch/broadcast question for pin={}: {}", pin, e.getMessage());
+            }
+        }
 
         publishStateChangeEvent(pin, currentState, SessionStatus.QUESTION_OPEN.name());
 
-        log.info("Advanced to next question: pin={}, hostId={}", pin, hostId);
+        log.info("Advanced to next question: pin={}, hostId={}, questionIndex={}", pin, hostId, questionIndex);
     }
 
     /**
@@ -361,6 +391,37 @@ public class SessionService {
             log.debug("Join event published: pin={}, nickname={}, count={}", pin, nickname, count);
         } catch (Exception e) {
             log.warn("Failed to publish join event: pin={}, nickname={}", pin, nickname, e);
+        }
+    }
+
+    private void publishQuestionStartEvent(String pin, QuestionDTO question, int durationMs, long serverTimestamp) {
+        try {
+            String channel = "session:" + pin + ":broadcast";
+            StringBuilder optionsJson = new StringBuilder("[");
+            if (question.getOptions() != null) {
+                for (int i = 0; i < question.getOptions().size(); i++) {
+                    QuestionDTO.OptionDTO opt = question.getOptions().get(i);
+                    if (i > 0) optionsJson.append(",");
+                    optionsJson.append(String.format("{\"id\":\"%s\",\"text\":\"%s\"}",
+                            opt.getId() != null ? opt.getId() : String.valueOf(i),
+                            opt.getText().replace("\"", "\\\"")));
+                }
+            }
+            optionsJson.append("]");
+
+            String event = String.format(
+                    "{\"type\":\"question.start\",\"payload\":{\"questionId\":\"%s\",\"text\":\"%s\",\"options\":%s,\"type\":\"%s\",\"timeLimit\":%d,\"serverTimestamp\":%d}}",
+                    question.getId(),
+                    question.getText().replace("\"", "\\\""),
+                    optionsJson,
+                    question.getType(),
+                    question.getTimeLimitSeconds() != null ? question.getTimeLimitSeconds() : (durationMs / 1000),
+                    serverTimestamp
+            );
+            redisTemplate.convertAndSend(channel, event);
+            log.debug("Question start event published: pin={}, questionId={}", pin, question.getId());
+        } catch (Exception e) {
+            log.warn("Failed to publish question start event: pin={}", pin, e);
         }
     }
 }

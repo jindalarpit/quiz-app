@@ -118,7 +118,7 @@ public class RedisSessionService {
         fields.put("streak", "0");
         fields.put("multiplier", "1");
         fields.put("last_answer_time", "0");
-        fields.put("is_connected", "true");
+        fields.put("is_connected", "false");
         fields.put("disconnect_time", "0");
         fields.put("is_flagged", "false");
         fields.put("is_kicked", "false");

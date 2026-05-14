@@ -67,6 +67,10 @@ export function useWebSocket({
     isConnected: connectionState === 'connected',
     onSyncFailure,
   });
+  const timerSyncRef = useRef(timerSync);
+  useEffect(() => {
+    timerSyncRef.current = timerSync;
+  }, [timerSync]);
 
   const cleanup = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -126,7 +130,7 @@ export function useWebSocket({
         // Intercept clock sync responses for timer sync
         if (message.type === 'clock.sync_response') {
           const payload = message.payload as { serverTimestamp: number; clientTimestamp: number };
-          timerSync.handleSyncResponse(payload);
+          timerSyncRef.current.handleSyncResponse(payload);
         }
 
         // Still pass all messages to the consumer
@@ -160,7 +164,7 @@ export function useWebSocket({
     ws.onerror = () => {
       // onclose will fire after onerror
     };
-  }, [pin, token, participantId, enabled, cleanup, timerSync]);
+  }, [pin, token, participantId, enabled, cleanup]);
 
   const disconnect = useCallback(() => {
     reconnectAttemptRef.current = MAX_RECONNECT_ATTEMPTS; // Prevent reconnection

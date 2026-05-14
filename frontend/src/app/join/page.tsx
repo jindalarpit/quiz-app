@@ -145,10 +145,10 @@ export default function JoinPage() {
     }
 
     try {
-      const response = await api.post<{ participantId: string }>(`/api/sessions/${pin}/join`, {
+      const response = await api.post<{ id: string }>(`/api/sessions/${pin}/join`, {
         nickname: trimmed,
       });
-      setParticipantId(response.participantId);
+      setParticipantId(response.id);
       setWsEnabled(true);
       setStep('lobby');
     } catch (err: unknown) {
