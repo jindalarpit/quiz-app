@@ -51,22 +51,33 @@ public class QuizServiceClient {
 
     /**
      * Fetch all questions for a quiz from the Quiz Service.
+     * Uses the quiz detail endpoint which includes questions in the response.
      *
      * @param quizId the quiz UUID
+     * @param hostId the host user ID (required for quiz access)
      * @return list of QuestionDTOs, or empty list if the circuit is open
      */
     @CircuitBreaker(name = "quizService", fallbackMethod = "getQuestionsFallback")
-    public List<QuestionDTO> getQuestions(UUID quizId) {
-        String url = quizServiceUrl + "/api/quizzes/" + quizId + "/questions";
-        log.debug("Fetching questions from Quiz Service: {}", url);
+    public List<QuestionDTO> getQuestions(UUID quizId, UUID hostId) {
+        String url = quizServiceUrl + "/api/quizzes/" + quizId;
+        log.debug("Fetching quiz with questions from Quiz Service: {}", url);
 
-        ResponseEntity<List<QuestionDTO>> response = restTemplate.exchange(
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.set("X-User-Id", hostId.toString());
+        org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+
+        ResponseEntity<QuizDTO> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<List<QuestionDTO>>() {}
+                entity,
+                QuizDTO.class
         );
-        return response.getBody();
+
+        QuizDTO quiz = response.getBody();
+        if (quiz != null && quiz.getQuestions() != null) {
+            return quiz.getQuestions();
+        }
+        return Collections.emptyList();
     }
 
     /**
@@ -83,7 +94,7 @@ public class QuizServiceClient {
      * Fallback for getQuestions when circuit breaker is open or call fails.
      */
     @SuppressWarnings("unused")
-    private List<QuestionDTO> getQuestionsFallback(UUID quizId, Throwable throwable) {
+    private List<QuestionDTO> getQuestionsFallback(UUID quizId, UUID hostId, Throwable throwable) {
         log.error("Circuit breaker fallback: failed to fetch questions for quiz {}: {}",
                 quizId, throwable.getMessage());
         return Collections.emptyList();

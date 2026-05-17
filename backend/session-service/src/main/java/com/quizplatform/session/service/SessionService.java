@@ -4,6 +4,7 @@ import com.quizplatform.common.dto.QuestionDTO;
 import com.quizplatform.common.exception.DuplicateResourceException;
 import com.quizplatform.common.exception.ForbiddenException;
 import com.quizplatform.common.exception.ResourceNotFoundException;
+import com.quizplatform.common.exception.ServiceUnavailableException;
 import com.quizplatform.common.exception.SessionFullException;
 import com.quizplatform.common.exception.ValidationException;
 import com.quizplatform.session.client.QuizServiceClient;
@@ -158,10 +159,34 @@ public class SessionService {
         // Valid transitions: LOBBY → QUESTION_OPEN, REVEAL → QUESTION_OPEN
         stateMachine.validateTransition(current, SessionStatus.QUESTION_OPEN);
 
-        redisSessionService.updateSessionState(pin, SessionStatus.QUESTION_OPEN.name());
-
         // Get current question index (0-based) before incrementing
         int questionIndex = redisSessionService.getCurrentQuestionIndex(pin);
+
+        // Fetch question from quiz service BEFORE transitioning state
+        Map<Object, Object> sessionFields = redisSessionService.getSessionFields(pin);
+        String quizIdStr = sessionFields.get("quiz_id") != null ? sessionFields.get("quiz_id").toString() : null;
+
+        QuestionDTO question = null;
+        if (quizIdStr != null) {
+            try {
+                UUID quizId = UUID.fromString(quizIdStr);
+                List<QuestionDTO> questions = quizServiceClient.getQuestions(quizId, hostId);
+                if (questions != null && questionIndex < questions.size()) {
+                    question = questions.get(questionIndex);
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch question for pin={}, questionIndex={}: {}", pin, questionIndex, e.getMessage());
+                throw new ServiceUnavailableException("quiz-service", "Failed to fetch question: " + e.getMessage());
+            }
+        }
+
+        if (question == null) {
+            log.error("No question available for pin={}, questionIndex={}", pin, questionIndex);
+            throw new ServiceUnavailableException("quiz-service", "No question available at index " + questionIndex);
+        }
+
+        // Now that we have the question, transition state
+        redisSessionService.updateSessionState(pin, SessionStatus.QUESTION_OPEN.name());
         redisSessionService.incrementQuestionIndex(pin);
 
         // Set question timing
@@ -169,24 +194,13 @@ public class SessionService {
         int durationMs = redisSessionService.getQuestionDurationMs(pin);
         redisSessionService.setQuestionTiming(pin, startTime, durationMs);
 
-        // Fetch question from quiz service and broadcast
-        Map<Object, Object> sessionFields = redisSessionService.getSessionFields(pin);
-        String quizIdStr = sessionFields.get("quiz_id") != null ? sessionFields.get("quiz_id").toString() : null;
-        if (quizIdStr != null) {
-            try {
-                UUID quizId = UUID.fromString(quizIdStr);
-                List<QuestionDTO> questions = quizServiceClient.getQuestions(quizId);
-                if (questions != null && questionIndex < questions.size()) {
-                    QuestionDTO question = questions.get(questionIndex);
-                    // Store correct answer for scoring
-                    redisSessionService.storeCorrectAnswer(pin, questionIndex, question.getCorrectAnswer());
-                    // Broadcast question.start event
-                    publishQuestionStartEvent(pin, question, durationMs, startTime);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to fetch/broadcast question for pin={}: {}", pin, e.getMessage());
-            }
+        // Store correct answer for scoring (may be null for POLL questions)
+        if (question.getCorrectAnswer() != null) {
+            redisSessionService.storeCorrectAnswer(pin, questionIndex, question.getCorrectAnswer());
         }
+
+        // Broadcast question.start event
+        publishQuestionStartEvent(pin, question, durationMs, startTime);
 
         publishStateChangeEvent(pin, currentState, SessionStatus.QUESTION_OPEN.name());
 

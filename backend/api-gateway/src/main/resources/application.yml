@@ -38,7 +38,7 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
 
 jwt:
-  secret: ${JWT_SECRET:defaultSecretKeyForDevelopmentOnlyDoNotUseInProduction123456}
+  secret: ${JWT_SECRET:dev-secret-key-change-in-production-min-32-chars}
 
 gateway:
   rate-limit:

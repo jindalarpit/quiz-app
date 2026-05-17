@@ -102,6 +102,14 @@ export default function JoinPage() {
           setState(payload.state as 'QUESTION_OPEN' | 'QUESTION_CLOSED' | 'REVEAL');
           break;
         }
+        case 'session.state_changed': {
+          const payload = message.payload as { state: string; previousState: string };
+          if (payload.state === 'QUESTION_OPEN' && payload.previousState === 'LOBBY') {
+            setStep('playing');
+          }
+          setState(payload.state as 'LOBBY' | 'QUESTION_OPEN' | 'QUESTION_CLOSED' | 'REVEAL' | 'PAUSED' | 'ENDED');
+          break;
+        }
         case 'participant.kicked':
           alert('You have been removed from the session.');
           resetSession();

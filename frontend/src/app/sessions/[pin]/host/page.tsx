@@ -90,6 +90,11 @@ export default function HostSessionPage() {
           setState(payload.state as 'QUESTION_OPEN' | 'QUESTION_CLOSED' | 'REVEAL');
           break;
         }
+        case 'session.state_changed': {
+          const payload = message.payload as { state: string; previousState: string };
+          setState(payload.state as 'LOBBY' | 'QUESTION_OPEN' | 'QUESTION_CLOSED' | 'REVEAL' | 'PAUSED' | 'ENDED');
+          break;
+        }
       }
     },
     [addParticipant, setParticipantCount, setCurrentQuestion, setState, setRevealData, setLeaderboard, setFinalLeaderboard, setSessionSummary]
@@ -110,7 +115,13 @@ export default function HostSessionPage() {
   }, [setState, resetSession]);
 
   const handleStartQuiz = async () => {
-    await api.post(`/api/sessions/${pin}/next`);
+    try {
+      await api.post(`/api/sessions/${pin}/next`);
+    } catch (error: unknown) {
+      const apiError = error as { message?: string; status?: number };
+      console.error('Failed to start quiz:', apiError.message);
+      // Could show a toast/notification here in the future
+    }
   };
 
   const handleNextQuestion = async () => {

@@ -395,11 +395,20 @@ function QuestionForm({
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-3">
+      <div className="flex items-center justify-end gap-3">
+        {form.type !== 'POLL' && !form.correctAnswer && (
+          <span className="text-xs text-amber-600 dark:text-amber-400">
+            Select the correct answer using the radio buttons
+          </span>
+        )}
         <button onClick={onCancel} className="btn-secondary text-sm">
           Cancel
         </button>
-        <button onClick={onSave} disabled={!form.text.trim()} className="btn-primary text-sm">
+        <button
+          onClick={onSave}
+          disabled={!form.text.trim() || (form.type !== 'POLL' && !form.correctAnswer)}
+          className="btn-primary text-sm"
+        >
           {saveLabel}
         </button>
       </div>

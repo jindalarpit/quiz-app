@@ -61,7 +61,7 @@ services:
       dockerfile: Dockerfile
     container_name: quiz-auth-service
     ports:
-      - "8081:8080"
+      - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/quizplatform
@@ -76,7 +76,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -90,7 +90,7 @@ services:
       dockerfile: Dockerfile
     container_name: quiz-quiz-service
     ports:
-      - "8082:8080"
+      - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/quizplatform
@@ -100,7 +100,7 @@ services:
       postgresql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -114,7 +114,7 @@ services:
       dockerfile: Dockerfile
     container_name: quiz-session-service
     ports:
-      - "8083:8080"
+      - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/quizplatform
@@ -122,14 +122,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: quiz_dev_password
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      QUIZ_SERVICE_URL: http://quiz-service:8080
+      QUIZ_SERVICE_URL: http://quiz-service:8081
     depends_on:
       postgresql:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -143,17 +143,17 @@ services:
       dockerfile: Dockerfile
     container_name: quiz-websocket-service
     ports:
-      - "8084:8080"
+      - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      SESSION_SERVICE_URL: http://session-service:8080
+      SESSION_SERVICE_URL: http://session-service:8082
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -167,14 +167,14 @@ services:
       dockerfile: Dockerfile
     container_name: quiz-api-gateway
     ports:
-      - "8080:8080"
+      - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       AUTH_SERVICE_URL: http://auth-service:8080
-      QUIZ_SERVICE_URL: http://quiz-service:8080
-      SESSION_SERVICE_URL: http://session-service:8080
-      WEBSOCKET_SERVICE_URL: http://websocket-service:8080
-      ANALYTICS_SERVICE_URL: http://analytics-service:8080
+      QUIZ_SERVICE_URL: http://quiz-service:8081
+      SESSION_SERVICE_URL: http://session-service:8082
+      WEBSOCKET_SERVICE_URL: http://websocket-service:8084
+      ANALYTICS_SERVICE_URL: http://analytics-service:8083
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       JWT_SECRET: dev-secret-key-change-in-production-min-32-chars
@@ -184,7 +184,7 @@ services:
       - session-service
       - websocket-service
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -200,8 +200,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
-      NEXT_PUBLIC_WS_URL: ws://localhost:8084
+      NEXT_PUBLIC_API_URL: http://localhost:8085
+      NEXT_PUBLIC_WS_URL: localhost:8084
     depends_on:
       - api-gateway
     networks:
