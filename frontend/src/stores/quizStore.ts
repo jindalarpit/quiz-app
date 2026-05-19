@@ -42,7 +42,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const quiz = await api.get<Quiz>(`/api/quizzes/${id}`);
-      set({ currentQuiz: quiz, isLoading: false });
+      set({ currentQuiz: { ...quiz, questions: quiz.questions ?? [] }, isLoading: false });
     } catch (err: unknown) {
       const message = (err as { message?: string })?.message || 'Failed to fetch quiz';
       set({ error: message, isLoading: false });
@@ -70,8 +70,12 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const quiz = await api.put<Quiz>(`/api/quizzes/${id}`, data);
-      set({ currentQuiz: quiz, isLoading: false });
-      const { quizzes } = get();
+      const { currentQuiz, quizzes } = get();
+      // Preserve existing questions since the update response doesn't include them
+      set({
+        currentQuiz: { ...quiz, questions: quiz.questions ?? currentQuiz?.questions ?? [] },
+        isLoading: false,
+      });
       set({
         quizzes: quizzes.map((q) =>
           q.id === id ? { ...q, title: quiz.title, description: quiz.description, updatedAt: quiz.updatedAt } : q

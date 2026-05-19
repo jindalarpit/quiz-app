@@ -131,6 +131,62 @@ export interface SessionSummary {
   durationSeconds: number;
 }
 
+// ============ Results & Leaderboard Types ============
+export interface FinalLeaderboardEntry {
+  rank: number;
+  nickname: string;
+  score: number;
+  correctAnswers: number;
+  totalAnswers: number;
+  maxStreak: number;
+  avgResponseTimeSec: number;
+}
+
+export interface PagedLeaderboardResponse {
+  sessionId: string;
+  entries: FinalLeaderboardEntry[];
+  currentPage: number;
+  totalPages: number;
+  totalParticipants: number;
+  pageSize: number;
+}
+
+// ============ Results Types ============
+export type AnswerStatus = 'CORRECT' | 'INCORRECT' | 'UNANSWERED';
+
+export interface QuestionResultEntry {
+  questionNumber: number;
+  status: AnswerStatus;
+}
+
+export interface ParticipantSelfResult {
+  rank: number;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  maxStreak: number;
+  avgResponseTimeSec: number;
+  scoreDifference: number;
+  aboveAverage: boolean;
+  questionBreakdown: QuestionResultEntry[];
+}
+
+// ============ Quiz History Types ============
+export interface SessionHistoryEntry {
+  sessionId: string;
+  quizTitle: string;
+  endedAt: string;
+  participantCount: number;
+  durationSeconds: number;
+}
+
+export interface PagedHistoryResponse {
+  sessions: SessionHistoryEntry[];
+  currentPage: number;
+  totalPages: number;
+  totalSessions: number;
+}
+
 // ============ WebSocket Event Types ============
 export type WSEventType =
   | 'session.joined'

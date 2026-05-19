@@ -25,6 +25,9 @@ public class Session {
     @Column(name = "quiz_id", nullable = false)
     private UUID quizId;
 
+    @Column(name = "quiz_title", length = 255)
+    private String quizTitle;
+
     @Column(name = "host_id", nullable = false)
     private UUID hostId;
 

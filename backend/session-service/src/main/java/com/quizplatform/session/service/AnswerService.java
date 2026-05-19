@@ -29,6 +29,7 @@ public class AnswerService {
     private final RedisSessionService redisSessionService;
     private final ScoreCalculator scoreCalculator;
     private final AntiCheatService antiCheatService;
+    private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     /**
      * Submit an answer for a participant.
@@ -85,13 +86,13 @@ public class AnswerService {
             }
         }
 
-        // 6. Get current question index
-        int questionIndex = redisSessionService.getCurrentQuestionIndex(pin);
+        // 6. Get current question index (already incremented by advanceToNextQuestion, so subtract 1)
+        int questionIndex = redisSessionService.getCurrentQuestionIndex(pin) - 1;
 
         // 7. Check for duplicate submission using HSETNX
         long submissionTimestamp = now;
         String correctAnswer = redisSessionService.getCorrectAnswer(pin, questionIndex);
-        boolean isCorrect = answer.equalsIgnoreCase(correctAnswer);
+        boolean isCorrect = correctAnswer != null && answer.equalsIgnoreCase(correctAnswer);
 
         // Get current streak before scoring
         int currentStreak = redisSessionService.getStreak(pin, request.getParticipantId());
@@ -189,8 +190,8 @@ public class AnswerService {
         // Transition state to REVEAL
         redisSessionService.updateSessionState(pin, SessionStatus.REVEAL.name());
 
-        // Get current question index
-        int questionIndex = redisSessionService.getCurrentQuestionIndex(pin);
+        // Get current question index (already incremented by advanceToNextQuestion, so subtract 1)
+        int questionIndex = redisSessionService.getCurrentQuestionIndex(pin) - 1;
 
         // Get correct answer
         String correctAnswer = redisSessionService.getCorrectAnswer(pin, questionIndex);
@@ -223,12 +224,64 @@ public class AnswerService {
         log.info("Answer revealed: pin={}, question={}, correctAnswer={}, accuracy={}",
                 pin, questionIndex, correctAnswer, accuracyRate);
 
+        // Publish question.reveal event via Redis pub/sub for WebSocket delivery
+        publishRevealEvent(pin, correctAnswer, stats, leaderboard);
+
         return RevealResult.builder()
                 .correctAnswer(correctAnswer)
                 .stats(stats)
                 .accuracyRate(accuracyRate)
                 .leaderboard(leaderboard)
                 .build();
+    }
+
+    private void publishRevealEvent(String pin, String correctAnswer,
+                                     Map<String, Integer> stats, List<LeaderboardEntry> leaderboard) {
+        try {
+            String channel = "session:" + pin + ":broadcast";
+
+            // Build leaderboard JSON array
+            StringBuilder lb = new StringBuilder("[");
+            for (int i = 0; i < leaderboard.size(); i++) {
+                LeaderboardEntry e = leaderboard.get(i);
+                if (i > 0) lb.append(",");
+                lb.append(String.format(
+                    "{\"rank\":%d,\"participantId\":\"%s\",\"nickname\":\"%s\",\"score\":%.0f,\"rankChange\":%d}",
+                    e.getRank(), e.getParticipantId(),
+                    e.getNickname().replace("\"", "\\\""),
+                    e.getScore(), e.getRankChange()));
+            }
+            lb.append("]");
+
+            // Build stats JSON
+            StringBuilder statsJson = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Integer> entry : stats.entrySet()) {
+                if (!first) statsJson.append(",");
+                statsJson.append(String.format("\"%s\":%d", entry.getKey().replace("\"", "\\\""), entry.getValue()));
+                first = false;
+            }
+            statsJson.append("}");
+
+            String event = String.format(
+                "{\"type\":\"question.reveal\",\"payload\":{\"questionId\":\"current\",\"correctAnswer\":\"%s\",\"stats\":%s}}",
+                correctAnswer != null ? correctAnswer.replace("\"", "\\\"") : "",
+                statsJson);
+            redisTemplate.convertAndSend(channel, event);
+
+            // Also publish leaderboard update
+            String leaderboardEvent = String.format(
+                "{\"type\":\"leaderboard.update\",\"payload\":{\"top5\":%s}}",
+                lb);
+            redisTemplate.convertAndSend(channel, leaderboardEvent);
+
+            // Publish state change
+            String stateEvent = String.format(
+                "{\"type\":\"session.state_changed\",\"payload\":{\"state\":\"REVEAL\",\"previousState\":\"QUESTION_CLOSED\"}}");
+            redisTemplate.convertAndSend(channel, stateEvent);
+        } catch (Exception e) {
+            log.error("Failed to publish reveal event for pin={}: {}", pin, e.getMessage());
+        }
     }
 
     /**

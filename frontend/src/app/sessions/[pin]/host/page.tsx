@@ -76,9 +76,22 @@ export default function HostSessionPage() {
           break;
         }
         case 'session.ended': {
-          const payload = message.payload as { finalLeaderboard: { rank: number; participantId: string; nickname: string; score: number; rankChange: number }[]; summary: { totalQuestions: number; totalParticipants: number; durationSeconds: number } };
-          setFinalLeaderboard(payload.finalLeaderboard);
-          setSessionSummary(payload.summary);
+          const payload = message.payload as {
+            leaderboard?: { rank: number; participantId?: string; nickname: string; score: number; rankChange?: number }[];
+            finalLeaderboard?: { rank: number; participantId: string; nickname: string; score: number; rankChange: number }[];
+            summary?: { totalQuestions: number; totalParticipants: number; durationSeconds: number };
+          };
+          const entries = (payload.finalLeaderboard || payload.leaderboard || []).map((e, i) => ({
+            rank: e.rank,
+            participantId: e.participantId || `participant-${i}`,
+            nickname: e.nickname,
+            score: e.score,
+            rankChange: e.rankChange || 0,
+          }));
+          setFinalLeaderboard(entries);
+          if (payload.summary) {
+            setSessionSummary(payload.summary);
+          }
           setState('ENDED');
           break;
         }
@@ -204,15 +217,29 @@ export default function HostSessionPage() {
 
       {currentQuestion && state === 'QUESTION_OPEN' && (
         <div className="w-full max-w-3xl">
-          <TimerDisplay timeLimit={currentQuestion.timeLimit} serverTimestamp={currentQuestion.serverTimestamp} />
+          <TimerDisplay
+            timeLimit={currentQuestion.timeLimit}
+            serverTimestamp={currentQuestion.serverTimestamp}
+            onExpire={() => {
+              api.post(`/api/sessions/${pin}/skip`).catch(() => {});
+            }}
+          />
           <QuestionDisplay question={currentQuestion} disabled />
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => api.post(`/api/sessions/${pin}/skip`).catch(() => {})}
+              className="btn-primary px-8 py-3"
+            >
+              Skip → Close Question
+            </button>
+          </div>
         </div>
       )}
 
       {state === 'QUESTION_CLOSED' && currentQuestion && (
         <div className="text-center">
           <p className="text-2xl font-bold text-slate-900 dark:text-white">Time&apos;s up!</p>
-          <button onClick={() => api.post(`/api/sessions/${pin}/next`)} className="btn-primary mt-4">
+          <button onClick={() => api.post(`/api/sessions/${pin}/reveal`)} className="btn-primary mt-4">
             Reveal Answer
           </button>
         </div>

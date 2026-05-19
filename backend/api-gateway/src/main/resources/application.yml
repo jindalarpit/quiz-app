@@ -26,6 +26,14 @@ spring:
           uri: ${ANALYTICS_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/analytics/**
+        - id: analytics-history
+          uri: ${ANALYTICS_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/history/**
+        - id: analytics-export
+          uri: ${ANALYTICS_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/export/**
         - id: websocket-service
           uri: ${WEBSOCKET_SERVICE_URL:ws://localhost:8084}
           predicates:

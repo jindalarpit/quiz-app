@@ -46,6 +46,9 @@ public class SessionParticipant {
     @Column(name = "is_flagged")
     private Boolean isFlagged;
 
+    @Column(name = "last_answer_at")
+    private Instant lastAnswerAt;
+
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 }

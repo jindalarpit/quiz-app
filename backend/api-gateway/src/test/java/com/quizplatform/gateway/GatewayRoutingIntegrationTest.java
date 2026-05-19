@@ -237,6 +237,183 @@ class GatewayRoutingIntegrationTest {
         assertThat(exchange.getResponse().getStatusCode()).isNull();
     }
 
+    @Test
+    @DisplayName("Route configuration: leaderboard endpoint requires JWT")
+    void routeConfig_leaderboardEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/sessions/abc123/leaderboard?page=0&size=20").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: leaderboard self endpoint requires JWT")
+    void routeConfig_leaderboardSelfEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/sessions/abc123/leaderboard/self").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: history endpoint requires JWT")
+    void routeConfig_historyEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/history?page=0&size=20").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: history leaderboard endpoint requires JWT")
+    void routeConfig_historyLeaderboardEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/history/some-session-id/leaderboard").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: export CSV endpoint requires JWT")
+    void routeConfig_exportCsvEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/export/some-session-id/csv").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: export PDF endpoint requires JWT")
+    void routeConfig_exportPdfEndpoint_requiresJwt() {
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/export/some-session-id/pdf").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Route configuration: leaderboard endpoint accessible with valid JWT")
+    void routeConfig_leaderboardEndpoint_accessibleWithValidJwt() {
+        UUID userId = UUID.randomUUID();
+        String token = generateValidToken(userId, "HOST");
+
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/sessions/abc123/leaderboard?page=0&size=20")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicReference<ServerWebExchange> capturedExchange = new AtomicReference<>();
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenAnswer(invocation -> {
+            capturedExchange.set(invocation.getArgument(0));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(capturedExchange.get()).isNotNull();
+        assertThat(capturedExchange.get().getRequest().getHeaders().getFirst("X-User-Id"))
+                .isEqualTo(userId.toString());
+    }
+
+    @Test
+    @DisplayName("Route configuration: history endpoint accessible with valid JWT")
+    void routeConfig_historyEndpoint_accessibleWithValidJwt() {
+        UUID userId = UUID.randomUUID();
+        String token = generateValidToken(userId, "HOST");
+
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/history?page=0&size=20")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicReference<ServerWebExchange> capturedExchange = new AtomicReference<>();
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenAnswer(invocation -> {
+            capturedExchange.set(invocation.getArgument(0));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(capturedExchange.get()).isNotNull();
+        assertThat(capturedExchange.get().getRequest().getHeaders().getFirst("X-User-Id"))
+                .isEqualTo(userId.toString());
+    }
+
+    @Test
+    @DisplayName("Route configuration: export endpoint accessible with valid JWT")
+    void routeConfig_exportEndpoint_accessibleWithValidJwt() {
+        UUID userId = UUID.randomUUID();
+        String token = generateValidToken(userId, "HOST");
+
+        MockServerHttpRequest request =
+                MockServerHttpRequest.get("/api/export/some-session-id/csv")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicReference<ServerWebExchange> capturedExchange = new AtomicReference<>();
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any(ServerWebExchange.class))).thenAnswer(invocation -> {
+            capturedExchange.set(invocation.getArgument(0));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(jwtValidationFilter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(capturedExchange.get()).isNotNull();
+        assertThat(capturedExchange.get().getRequest().getHeaders().getFirst("X-User-Id"))
+                .isEqualTo(userId.toString());
+    }
+
     private String generateValidToken(UUID userId, String role) {
         SecretKey key = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()

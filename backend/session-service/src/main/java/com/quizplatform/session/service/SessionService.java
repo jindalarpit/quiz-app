@@ -44,6 +44,7 @@ public class SessionService {
     private final SessionParticipantRepository sessionParticipantRepository;
     private final StringRedisTemplate redisTemplate;
     private final QuizServiceClient quizServiceClient;
+    private final LeaderboardService leaderboardService;
 
     /**
      * Start a new session: generate PIN, store in Redis, return response.
@@ -275,7 +276,8 @@ public class SessionService {
     }
 
     /**
-     * End the session (host only) — transition to ENDED, persist to PostgreSQL.
+     * End the session (host only) — transition to ENDED, persist to PostgreSQL,
+     * compute final rankings, and publish SESSION_ENDED event with leaderboard payload.
      */
     public void endSession(String pin, UUID hostId) {
         validateHost(pin, hostId);
@@ -288,7 +290,21 @@ public class SessionService {
         redisSessionService.updateSessionState(pin, SessionStatus.ENDED.name());
 
         // Persist session and participants to PostgreSQL
-        persistSession(pin);
+        Session savedSession = persistSession(pin);
+
+        // Compute final rankings and publish SESSION_ENDED event with leaderboard payload.
+        // This triggers Redis pub/sub which the WebSocket service subscribes to,
+        // broadcasting the final leaderboard to all connected session participants.
+        if (savedSession != null) {
+            try {
+                leaderboardService.computeAndPersistFinalRankings(savedSession.getId());
+            } catch (Exception e) {
+                log.error("Failed to compute final rankings for session: pin={}, error={}",
+                        pin, e.getMessage(), e);
+                // The session is already ended; ranking failure is handled by
+                // LeaderboardService's retry logic and failure event publishing
+            }
+        }
 
         publishStateChangeEvent(pin, currentState, SessionStatus.ENDED.name());
 
@@ -314,11 +330,11 @@ public class SessionService {
         }
     }
 
-    private void persistSession(String pin) {
+    private Session persistSession(String pin) {
         try {
             Map<Object, Object> fields = redisSessionService.getSessionFields(pin);
             if (fields == null || fields.isEmpty()) {
-                return;
+                return null;
             }
 
             Session session = Session.builder()
@@ -337,8 +353,10 @@ public class SessionService {
             persistParticipants(pin, savedSession);
 
             log.info("Session persisted to PostgreSQL: pin={}", pin);
+            return savedSession;
         } catch (Exception e) {
             log.error("Failed to persist session to PostgreSQL: pin={}", pin, e);
+            return null;
         }
     }
 

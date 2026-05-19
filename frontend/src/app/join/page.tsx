@@ -88,9 +88,22 @@ export default function JoinPage() {
           setAnswerAcknowledged(true);
           break;
         case 'session.ended': {
-          const payload = message.payload as { finalLeaderboard: { rank: number; participantId: string; nickname: string; score: number; rankChange: number }[]; summary: { totalQuestions: number; totalParticipants: number; durationSeconds: number } };
-          setFinalLeaderboard(payload.finalLeaderboard);
-          setSessionSummary(payload.summary);
+          const payload = message.payload as {
+            leaderboard?: { rank: number; participantId?: string; nickname: string; score: number; rankChange?: number }[];
+            finalLeaderboard?: { rank: number; participantId: string; nickname: string; score: number; rankChange: number }[];
+            summary?: { totalQuestions: number; totalParticipants: number; durationSeconds: number };
+          };
+          const entries = (payload.finalLeaderboard || payload.leaderboard || []).map((e, i) => ({
+            rank: e.rank,
+            participantId: e.participantId || `participant-${i}`,
+            nickname: e.nickname,
+            score: e.score,
+            rankChange: e.rankChange || 0,
+          }));
+          setFinalLeaderboard(entries);
+          if (payload.summary) {
+            setSessionSummary(payload.summary);
+          }
           setState('ENDED');
           break;
         }

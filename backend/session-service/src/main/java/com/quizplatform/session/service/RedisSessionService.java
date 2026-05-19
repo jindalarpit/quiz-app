@@ -127,6 +127,12 @@ public class RedisSessionService {
         redisTemplate.opsForHash().putAll(participantKey, fields);
         redisTemplate.expire(participantKey, Duration.ofSeconds(SESSION_TTL_SECONDS));
 
+        // Add participant to leaderboard sorted set with initial score of 0
+        // This ensures all participants appear in the final leaderboard even if they never score
+        String leaderboardKeyStr = leaderboardKey(pin);
+        redisTemplate.opsForZSet().add(leaderboardKeyStr, participantId.toString(), 0);
+        redisTemplate.expire(leaderboardKeyStr, Duration.ofSeconds(SESSION_TTL_SECONDS));
+
         // Add nickname to the nicknames set (lowercase for case-insensitive uniqueness)
         redisTemplate.opsForSet().add(nicknamesKey(pin), nickname.toLowerCase());
         redisTemplate.expire(nicknamesKey(pin), Duration.ofSeconds(SESSION_TTL_SECONDS));

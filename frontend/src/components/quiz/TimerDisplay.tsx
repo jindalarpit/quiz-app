@@ -11,6 +11,8 @@ interface TimerDisplayProps {
   serverTimestamp: number;
   /** Function to get estimated server time (from TimerSync). Falls back to Date.now() if not provided. */
   getServerTime?: () => number;
+  /** Callback fired once when the timer reaches zero */
+  onExpire?: () => void;
 }
 
 /** Threshold in seconds for switching to high-frequency updates */
@@ -20,10 +22,11 @@ const NORMAL_INTERVAL_MS = 1000;
 /** High-frequency update interval in ms (final 3 seconds) */
 const URGENT_INTERVAL_MS = 100;
 
-export function TimerDisplay({ timeLimit, serverTimestamp, getServerTime }: TimerDisplayProps) {
+export function TimerDisplay({ timeLimit, serverTimestamp, getServerTime, onExpire }: TimerDisplayProps) {
   const [remaining, setRemaining] = useState(timeLimit);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIntervalMs = useRef<number>(NORMAL_INTERVAL_MS);
+  const expiredRef = useRef(false);
 
   const getCurrentServerTime = useCallback((): number => {
     return getServerTime ? getServerTime() : Date.now();
@@ -61,6 +64,10 @@ export function TimerDisplay({ timeLimit, serverTimestamp, getServerTime }: Time
       if (currentLeft <= 0 && intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+        if (!expiredRef.current && onExpire) {
+          expiredRef.current = true;
+          onExpire();
+        }
       }
     }, initialInterval);
 

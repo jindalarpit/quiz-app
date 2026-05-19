@@ -46,7 +46,7 @@ class AntiCheatIntegrationTest {
     @BeforeEach
     void setUp() {
         antiCheatService = new AntiCheatService(redisSessionService, redisTemplate);
-        answerService = new AnswerService(redisSessionService, scoreCalculator, antiCheatService);
+        answerService = new AnswerService(redisSessionService, scoreCalculator, antiCheatService, redisTemplate);
     }
 
     // ==================== Fast-Answer Detection Tests ====================
