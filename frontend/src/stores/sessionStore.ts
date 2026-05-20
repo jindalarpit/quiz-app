@@ -1,10 +1,14 @@
 import { create } from 'zustand';
 
 import type {
+  AnimationPhase,
   AnswerRevealData,
+  LeaderboardAnimationState,
   LeaderboardEntry,
+  LeaderboardUpdateEntry,
   Participant,
   QuestionDisplay,
+  ScoreBreakdown,
   SessionState,
   SessionSummary,
 } from '@/types';
@@ -34,6 +38,9 @@ interface SessionStoreState {
   myRank: number | null;
   myScore: number | null;
 
+  // Leaderboard animation state
+  leaderboardAnimation: LeaderboardAnimationState;
+
   // Session end
   finalLeaderboard: LeaderboardEntry[];
   sessionSummary: SessionSummary | null;
@@ -58,9 +65,24 @@ interface SessionStoreState {
   setSessionSummary: (summary: SessionSummary) => void;
   resetQuestion: () => void;
   resetSession: () => void;
+
+  // Leaderboard animation actions
+  updateLeaderboardEntries: (entries: LeaderboardUpdateEntry[], sequenceNumber: number, roundNumber?: number) => boolean;
+  setAnimationPhase: (phase: AnimationPhase) => void;
+  setRoundScoreBreakdown: (breakdown: ScoreBreakdown | null) => void;
+  resetLeaderboardAnimation: () => void;
 }
 
-export const useSessionStore = create<SessionStoreState>((set) => ({
+const initialLeaderboardAnimationState: LeaderboardAnimationState = {
+  previousEntries: [],
+  currentEntries: [],
+  lastSequenceNumber: 0,
+  animationPhase: 'idle',
+  roundScoreBreakdown: null,
+  roundNumber: 0,
+};
+
+export const useSessionStore = create<SessionStoreState>((set, get) => ({
   pin: null,
   state: null,
   participantId: null,
@@ -75,6 +97,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
   leaderboard: [],
   myRank: null,
   myScore: null,
+  leaderboardAnimation: { ...initialLeaderboardAnimationState },
   finalLeaderboard: [],
   sessionSummary: null,
 
@@ -118,7 +141,51 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
       leaderboard: [],
       myRank: null,
       myScore: null,
+      leaderboardAnimation: { ...initialLeaderboardAnimationState },
       finalLeaderboard: [],
       sessionSummary: null,
+    }),
+
+  // Leaderboard animation actions
+  updateLeaderboardEntries: (entries, sequenceNumber, roundNumber) => {
+    const { leaderboardAnimation } = get();
+
+    // Sequence number validation: discard events with sequence_number ≤ lastSequenceNumber
+    if (sequenceNumber <= leaderboardAnimation.lastSequenceNumber) {
+      return false;
+    }
+
+    set({
+      leaderboardAnimation: {
+        ...leaderboardAnimation,
+        previousEntries: leaderboardAnimation.currentEntries,
+        currentEntries: entries,
+        lastSequenceNumber: sequenceNumber,
+        animationPhase: 'position',
+        roundNumber: roundNumber ?? leaderboardAnimation.roundNumber + 1,
+      },
+    });
+    return true;
+  },
+
+  setAnimationPhase: (phase) =>
+    set((s) => ({
+      leaderboardAnimation: {
+        ...s.leaderboardAnimation,
+        animationPhase: phase,
+      },
+    })),
+
+  setRoundScoreBreakdown: (breakdown) =>
+    set((s) => ({
+      leaderboardAnimation: {
+        ...s.leaderboardAnimation,
+        roundScoreBreakdown: breakdown,
+      },
+    })),
+
+  resetLeaderboardAnimation: () =>
+    set({
+      leaderboardAnimation: { ...initialLeaderboardAnimationState },
     }),
 }));

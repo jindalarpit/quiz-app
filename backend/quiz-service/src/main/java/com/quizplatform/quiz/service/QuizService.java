@@ -61,6 +61,7 @@ public class QuizService {
                 .description(quiz.getDescription())
                 .coverImageUrl(quiz.getCoverImageUrl())
                 .isPublished(quiz.getIsPublished())
+                .scoringMode(quiz.getScoringMode())
                 .settings(quiz.getSettings())
                 .questionCount(questions.size())
                 .createdAt(quiz.getCreatedAt())
@@ -81,6 +82,9 @@ public class QuizService {
         }
         if (request.getCoverImageUrl() != null) {
             quiz.setCoverImageUrl(request.getCoverImageUrl());
+        }
+        if (request.getScoringMode() != null) {
+            quiz.setScoringMode(request.getScoringMode());
         }
 
         Quiz saved = quizRepository.save(quiz);
@@ -223,6 +227,16 @@ public class QuizService {
         log.info("Question deleted: quizId={}, questionId={}, position={}", quizId, questionId, deletedPosition);
     }
 
+    @Transactional
+    public QuizResponse updateScoringMode(UUID quizId, UUID ownerId, UpdateScoringModeRequest request) {
+        Quiz quiz = findQuizAndVerifyOwnership(quizId, ownerId);
+        quiz.setScoringMode(request.getScoringMode());
+        Quiz saved = quizRepository.save(quiz);
+        int questionCount = questionRepository.countByQuizId(quizId);
+        log.info("Quiz scoring mode updated: quizId={}, scoringMode={}", quizId, request.getScoringMode());
+        return toQuizResponse(saved, questionCount);
+    }
+
     public void validateQuiz(UUID quizId) {
         List<Question> questions = questionRepository.findByQuizIdOrderByPositionAsc(quizId);
 
@@ -267,6 +281,7 @@ public class QuizService {
                 .description(quiz.getDescription())
                 .coverImageUrl(quiz.getCoverImageUrl())
                 .isPublished(quiz.getIsPublished())
+                .scoringMode(quiz.getScoringMode())
                 .settings(quiz.getSettings())
                 .questionCount(questionCount)
                 .createdAt(quiz.getCreatedAt())

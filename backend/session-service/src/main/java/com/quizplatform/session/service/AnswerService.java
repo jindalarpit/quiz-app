@@ -7,6 +7,8 @@ import com.quizplatform.session.dto.AnswerResult;
 import com.quizplatform.session.dto.AnswerSubmitRequest;
 import com.quizplatform.session.dto.LeaderboardEntry;
 import com.quizplatform.session.dto.RevealResult;
+import com.quizplatform.session.dto.RoundResult;
+import com.quizplatform.session.model.ScoringMode;
 import com.quizplatform.session.model.SessionStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class AnswerService {
     private final RedisSessionService redisSessionService;
     private final ScoreCalculator scoreCalculator;
     private final AntiCheatService antiCheatService;
+    private final DynamicScoreEngine dynamicScoreEngine;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     /**
@@ -173,7 +176,13 @@ public class AnswerService {
 
     /**
      * Reveal the answer for the current question.
-     * Transitions state to REVEAL, computes answer statistics, and returns top 5 leaderboard.
+     * Transitions state to REVEAL, delegates scoring to DynamicScoreEngine,
+     * computes answer statistics, and returns top 5 leaderboard.
+     *
+     * The scoring mode is read from the session Redis hash (set once during session creation)
+     * and passed to DynamicScoreEngine for score computation.
+     *
+     * Requirements: 7.7, 8.1
      */
     public RevealResult revealAnswer(String pin, UUID hostId) {
         // Validate session exists
@@ -196,7 +205,14 @@ public class AnswerService {
         // Get correct answer
         String correctAnswer = redisSessionService.getCorrectAnswer(pin, questionIndex);
 
-        // Compute answer statistics
+        // Load scoring mode from session Redis hash (fixed for entire session duration)
+        String scoringModeStr = redisSessionService.getScoringMode(pin);
+        ScoringMode scoringMode = ScoringMode.fromString(scoringModeStr);
+
+        // Delegate scoring to DynamicScoreEngine
+        RoundResult roundResult = dynamicScoreEngine.computeAndBroadcastRound(pin, questionIndex, scoringMode);
+
+        // Compute answer statistics from the round result
         Map<Object, Object> answers = redisSessionService.getAnswersForQuestion(pin, questionIndex);
         Map<String, Integer> stats = new HashMap<>();
         int correctCount = 0;
@@ -221,8 +237,8 @@ public class AnswerService {
         // Get top 5 leaderboard with rank changes
         List<LeaderboardEntry> leaderboard = redisSessionService.getTopNWithRankChanges(pin, 5);
 
-        log.info("Answer revealed: pin={}, question={}, correctAnswer={}, accuracy={}",
-                pin, questionIndex, correctAnswer, accuracyRate);
+        log.info("Answer revealed: pin={}, question={}, correctAnswer={}, accuracy={}, scoringMode={}",
+                pin, questionIndex, correctAnswer, accuracyRate, scoringMode);
 
         // Publish question.reveal event via Redis pub/sub for WebSocket delivery
         publishRevealEvent(pin, correctAnswer, stats, leaderboard);

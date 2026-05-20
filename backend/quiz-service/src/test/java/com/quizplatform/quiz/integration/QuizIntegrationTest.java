@@ -3,6 +3,7 @@ package com.quizplatform.quiz.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.quizplatform.quiz.dto.*;
 import com.quizplatform.quiz.model.QuestionType;
+import com.quizplatform.quiz.model.ScoringMode;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -433,5 +434,242 @@ class QuizIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)))
                 .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    // ==================== Scoring Mode Tests ====================
+    // Validates: Requirements 7.1, 7.6
+
+    @Test
+    @Order(19)
+    void patchScoringMode_shouldReturn200WithUpdatedScoringMode() throws Exception {
+        // Create a quiz first
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Scoring Mode Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.scoringMode").value("SPEED_MATTERS")) // Default
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // Update scoring mode to BALANCED
+        UpdateScoringModeRequest patchRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(patchRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(quizId.toString()))
+                .andExpect(jsonPath("$.scoringMode").value("BALANCED"));
+
+        // Verify persistence by fetching the quiz
+        mockMvc.perform(get("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scoringMode").value("BALANCED"));
+    }
+
+    @Test
+    @Order(20)
+    void patchScoringMode_shouldUpdateToKnowledgeFirst() throws Exception {
+        // Create a quiz first
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Knowledge First Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // Update scoring mode to KNOWLEDGE_FIRST
+        UpdateScoringModeRequest patchRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.KNOWLEDGE_FIRST)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(patchRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scoringMode").value("KNOWLEDGE_FIRST"));
+    }
+
+    @Test
+    @Order(21)
+    void patchScoringMode_shouldUpdateToSpeedMatters() throws Exception {
+        // Create a quiz first
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Speed Matters Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // First change to BALANCED
+        UpdateScoringModeRequest balancedRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(balancedRequest)))
+                .andExpect(status().isOk());
+
+        // Then change back to SPEED_MATTERS
+        UpdateScoringModeRequest speedRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.SPEED_MATTERS)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(speedRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scoringMode").value("SPEED_MATTERS"));
+    }
+
+    @Test
+    @Order(22)
+    void patchScoringMode_withInvalidMode_shouldReturn400() throws Exception {
+        // Create a quiz first
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Invalid Mode Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // Try to update with invalid scoring mode
+        String invalidRequest = "{\"scoringMode\": \"INVALID_MODE\"}";
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidRequest))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Order(23)
+    void patchScoringMode_withNullMode_shouldReturn400() throws Exception {
+        // Create a quiz first
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Null Mode Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // Try to update with null scoring mode
+        String nullRequest = "{\"scoringMode\": null}";
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(nullRequest))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Order(24)
+    void patchScoringMode_withDifferentUser_shouldReturn403() throws Exception {
+        // Create a quiz as OWNER_ID
+        CreateQuizRequest createRequest = CreateQuizRequest.builder()
+                .title("Quiz for Auth Test")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = createResult.getResponse().getContentAsString();
+        QuizResponse createResponse = objectMapper.readValue(responseBody, QuizResponse.class);
+        UUID quizId = createResponse.getId();
+
+        // Try to update with a different user
+        UpdateScoringModeRequest patchRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header(USER_ID_HEADER, OTHER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(patchRequest)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(25)
+    void patchScoringMode_nonExistentQuiz_shouldReturn404() throws Exception {
+        UUID nonExistentId = UUID.randomUUID();
+        UpdateScoringModeRequest patchRequest = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        mockMvc.perform(patch("/api/quizzes/{id}", nonExistentId)
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(patchRequest)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(26)
+    void createQuiz_shouldDefaultToSpeedMattersMode() throws Exception {
+        CreateQuizRequest request = CreateQuizRequest.builder()
+                .title("Quiz with Default Scoring Mode")
+                .build();
+
+        mockMvc.perform(post("/api/quizzes")
+                        .header(USER_ID_HEADER, OWNER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.scoringMode").value("SPEED_MATTERS"));
     }
 }

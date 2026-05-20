@@ -108,4 +108,13 @@ public class QuizController {
         quizService.deleteQuestion(id, qId, ownerId);
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<QuizResponse> updateScoringMode(
+            @RequestHeader("X-User-Id") UUID ownerId,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateScoringModeRequest request) {
+        QuizResponse response = quizService.updateScoringMode(id, ownerId, request);
+        return ResponseEntity.ok(response);
+    }
 }

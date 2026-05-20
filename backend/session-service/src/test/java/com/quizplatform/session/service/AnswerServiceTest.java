@@ -6,7 +6,10 @@ import com.quizplatform.common.exception.ValidationException;
 import com.quizplatform.session.dto.AnswerResult;
 import com.quizplatform.session.dto.AnswerSubmitRequest;
 import com.quizplatform.session.dto.LeaderboardEntry;
+import com.quizplatform.session.dto.ParticipantRoundScore;
 import com.quizplatform.session.dto.RevealResult;
+import com.quizplatform.session.dto.RoundResult;
+import com.quizplatform.session.model.ScoringMode;
 import com.quizplatform.session.model.SessionStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +38,12 @@ class AnswerServiceTest {
 
     @Mock
     private AntiCheatService antiCheatService;
+
+    @Mock
+    private DynamicScoreEngine dynamicScoreEngine;
+
+    @Mock
+    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     @InjectMocks
     private AnswerService answerService;
@@ -262,12 +271,34 @@ class AnswerServiceTest {
     // ==================== Reveal Answer Tests ====================
 
     @Test
-    @DisplayName("Reveal answer - returns correct answer, stats, and leaderboard")
+    @DisplayName("Reveal answer - delegates scoring to DynamicScoreEngine and returns correct answer, stats, and leaderboard")
     void revealAnswer_success() {
         when(redisSessionService.sessionExists(PIN)).thenReturn(true);
         when(redisSessionService.getHostId(PIN)).thenReturn(HOST_ID.toString());
-        when(redisSessionService.getCurrentQuestionIndex(PIN)).thenReturn(1);
+        when(redisSessionService.getCurrentQuestionIndex(PIN)).thenReturn(2); // subtract 1 → questionIndex = 1
         when(redisSessionService.getCorrectAnswer(PIN, 1)).thenReturn("B");
+        when(redisSessionService.getScoringMode(PIN)).thenReturn("SPEED_MATTERS");
+
+        // Mock DynamicScoreEngine
+        RoundResult roundResult = RoundResult.builder()
+                .pin(PIN)
+                .roundNumber(1)
+                .timestamp(Instant.now())
+                .participantScores(List.of(
+                        ParticipantRoundScore.builder().participantId("p1").nickname("Player1")
+                                .roundScore(875).cumulativeScore(875).rank(1).rankDelta(0)
+                                .streakCount(1).streakMultiplier(1).correct(true).build(),
+                        ParticipantRoundScore.builder().participantId("p3").nickname("Player3")
+                                .roundScore(750).cumulativeScore(750).rank(2).rankDelta(0)
+                                .streakCount(1).streakMultiplier(1).correct(true).build()
+                ))
+                .correctAnswer("B")
+                .totalAnswered(3)
+                .totalCorrect(2)
+                .accuracyRate(0.6667)
+                .computationTimeMs(50)
+                .build();
+        when(dynamicScoreEngine.computeAndBroadcastRound(PIN, 1, ScoringMode.SPEED_MATTERS)).thenReturn(roundResult);
 
         Map<Object, Object> answers = new HashMap<>();
         answers.put("p1", "B|1000|875");
@@ -279,7 +310,7 @@ class AnswerServiceTest {
                 LeaderboardEntry.builder().participantId("p1").nickname("Player1").score(875).rank(1).build(),
                 LeaderboardEntry.builder().participantId("p3").nickname("Player3").score(750).rank(2).build()
         );
-        when(redisSessionService.getTopN(PIN, 5)).thenReturn(top5);
+        when(redisSessionService.getTopNWithRankChanges(PIN, 5)).thenReturn(top5);
 
         RevealResult result = answerService.revealAnswer(PIN, HOST_ID);
 
@@ -290,6 +321,7 @@ class AnswerServiceTest {
         assertThat(result.getLeaderboard()).hasSize(2);
 
         verify(redisSessionService).updateSessionState(PIN, SessionStatus.REVEAL.name());
+        verify(dynamicScoreEngine).computeAndBroadcastRound(PIN, 1, ScoringMode.SPEED_MATTERS);
     }
 
     @Test
@@ -318,10 +350,26 @@ class AnswerServiceTest {
     void revealAnswer_noAnswers_emptyStats() {
         when(redisSessionService.sessionExists(PIN)).thenReturn(true);
         when(redisSessionService.getHostId(PIN)).thenReturn(HOST_ID.toString());
-        when(redisSessionService.getCurrentQuestionIndex(PIN)).thenReturn(0);
+        when(redisSessionService.getCurrentQuestionIndex(PIN)).thenReturn(1); // subtract 1 → questionIndex = 0
         when(redisSessionService.getCorrectAnswer(PIN, 0)).thenReturn("C");
+        when(redisSessionService.getScoringMode(PIN)).thenReturn("BALANCED");
+
+        // Mock DynamicScoreEngine
+        RoundResult roundResult = RoundResult.builder()
+                .pin(PIN)
+                .roundNumber(0)
+                .timestamp(Instant.now())
+                .participantScores(Collections.emptyList())
+                .correctAnswer("C")
+                .totalAnswered(0)
+                .totalCorrect(0)
+                .accuracyRate(0.0)
+                .computationTimeMs(10)
+                .build();
+        when(dynamicScoreEngine.computeAndBroadcastRound(PIN, 0, ScoringMode.BALANCED)).thenReturn(roundResult);
+
         when(redisSessionService.getAnswersForQuestion(PIN, 0)).thenReturn(Collections.emptyMap());
-        when(redisSessionService.getTopN(PIN, 5)).thenReturn(Collections.emptyList());
+        when(redisSessionService.getTopNWithRankChanges(PIN, 5)).thenReturn(Collections.emptyList());
 
         RevealResult result = answerService.revealAnswer(PIN, HOST_ID);
 
@@ -329,5 +377,38 @@ class AnswerServiceTest {
         assertThat(result.getStats()).isEmpty();
         assertThat(result.getAccuracyRate()).isEqualTo(0.0);
         assertThat(result.getLeaderboard()).isEmpty();
+
+        verify(dynamicScoreEngine).computeAndBroadcastRound(PIN, 0, ScoringMode.BALANCED);
+    }
+
+    @Test
+    @DisplayName("Reveal answer - uses scoring mode from Redis session hash")
+    void revealAnswer_usesScoringModeFromRedis() {
+        when(redisSessionService.sessionExists(PIN)).thenReturn(true);
+        when(redisSessionService.getHostId(PIN)).thenReturn(HOST_ID.toString());
+        when(redisSessionService.getCurrentQuestionIndex(PIN)).thenReturn(3); // subtract 1 → questionIndex = 2
+        when(redisSessionService.getCorrectAnswer(PIN, 2)).thenReturn("A");
+        when(redisSessionService.getScoringMode(PIN)).thenReturn("KNOWLEDGE_FIRST");
+
+        RoundResult roundResult = RoundResult.builder()
+                .pin(PIN)
+                .roundNumber(2)
+                .timestamp(Instant.now())
+                .participantScores(Collections.emptyList())
+                .correctAnswer("A")
+                .totalAnswered(0)
+                .totalCorrect(0)
+                .accuracyRate(0.0)
+                .computationTimeMs(10)
+                .build();
+        when(dynamicScoreEngine.computeAndBroadcastRound(PIN, 2, ScoringMode.KNOWLEDGE_FIRST)).thenReturn(roundResult);
+
+        when(redisSessionService.getAnswersForQuestion(PIN, 2)).thenReturn(Collections.emptyMap());
+        when(redisSessionService.getTopNWithRankChanges(PIN, 5)).thenReturn(Collections.emptyList());
+
+        answerService.revealAnswer(PIN, HOST_ID);
+
+        // Verify the correct scoring mode was passed to DynamicScoreEngine
+        verify(dynamicScoreEngine).computeAndBroadcastRound(PIN, 2, ScoringMode.KNOWLEDGE_FIRST);
     }
 }

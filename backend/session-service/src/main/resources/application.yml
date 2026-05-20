@@ -27,6 +27,13 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
 
 services:
   quiz-service:
@@ -71,3 +78,7 @@ logging:
     com.quizplatform: DEBUG
   pattern:
     console: '{"timestamp":"%d{ISO8601}","level":"%level","service":"${spring.application.name}","logger":"%logger{36}","message":"%msg"}%n'
+
+kafka:
+  topics:
+    score-awarded: score.awarded

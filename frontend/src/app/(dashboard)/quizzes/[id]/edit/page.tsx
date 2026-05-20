@@ -3,9 +3,10 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { ScoringModeSelector } from '@/components/quiz/ScoringModeSelector';
 import { useAuthStore } from '@/stores/authStore';
 import { useQuizStore } from '@/stores/quizStore';
-import type { QuestionType } from '@/types';
+import type { QuestionType, ScoringMode } from '@/types';
 
 interface QuestionFormData {
   type: QuestionType;
@@ -39,10 +40,11 @@ export default function QuizEditorPage() {
   const router = useRouter();
   const quizId = params.id as string;
   const { user } = useAuthStore();
-  const { currentQuiz, isLoading, fetchQuiz, updateQuiz, addQuestion, updateQuestion, deleteQuestion } = useQuizStore();
+  const { currentQuiz, isLoading, fetchQuiz, updateQuiz, updateScoringMode, addQuestion, updateQuestion, deleteQuestion } = useQuizStore();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [scoringMode, setScoringMode] = useState<ScoringMode>('SPEED_MATTERS');
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [questionForm, setQuestionForm] = useState<QuestionFormData>({
@@ -66,11 +68,17 @@ export default function QuizEditorPage() {
     if (currentQuiz) {
       setTitle(currentQuiz.title);
       setDescription(currentQuiz.description || '');
+      setScoringMode(currentQuiz.scoringMode || 'SPEED_MATTERS');
     }
   }, [currentQuiz]);
 
   const handleSaveMetadata = async () => {
     await updateQuiz(quizId, { title, description });
+  };
+
+  const handleScoringModeChange = async (mode: ScoringMode) => {
+    setScoringMode(mode);
+    await updateScoringMode(quizId, mode);
   };
 
   const handleTypeChange = (type: QuestionType) => {
@@ -184,6 +192,10 @@ export default function QuizEditorPage() {
               maxLength={500}
             />
           </div>
+          <ScoringModeSelector
+            value={scoringMode}
+            onChange={handleScoringModeChange}
+          />
           <button onClick={handleSaveMetadata} className="btn-primary">
             Save
           </button>

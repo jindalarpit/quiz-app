@@ -3,16 +3,18 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect } from 'react';
 
+import { AnimatedLeaderboard } from '@/components/AnimatedLeaderboard';
 import { AnswerReveal } from '@/components/quiz/AnswerReveal';
 import { Leaderboard } from '@/components/quiz/Leaderboard';
 import { QuestionDisplay } from '@/components/quiz/QuestionDisplay';
 import { SessionEnd } from '@/components/quiz/SessionEnd';
 import { TimerDisplay } from '@/components/quiz/TimerDisplay';
 import { api } from '@/lib/api';
+import { buildHostView } from '@/lib/buildLeaderboardView';
 import { useWebSocket } from '@/lib/useWebSocket';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import type { WSMessage } from '@/types';
+import type { LeaderboardUpdateEntry, WSMessage } from '@/types';
 
 export default function HostSessionPage() {
   const params = useParams();
@@ -28,6 +30,7 @@ export default function HostSessionPage() {
     leaderboard,
     finalLeaderboard,
     sessionSummary,
+    leaderboardAnimation,
     setState,
     addParticipant,
     setParticipantCount,
@@ -37,6 +40,7 @@ export default function HostSessionPage() {
     setFinalLeaderboard,
     setSessionSummary,
     resetSession,
+    updateLeaderboardEntries,
   } = useSessionStore();
 
   const handleMessage = useCallback(
@@ -75,6 +79,18 @@ export default function HostSessionPage() {
           setLeaderboard(payload.top5);
           break;
         }
+        case 'leaderboard.updated': {
+          const payload = message.payload as {
+            sessionId: string;
+            roundNumber: number;
+            sequenceNumber: number;
+            timestamp: number;
+            entries: LeaderboardUpdateEntry[];
+          };
+          // Update store with new entries (handles sequence validation and stores previous entries)
+          updateLeaderboardEntries(payload.entries, payload.sequenceNumber, payload.roundNumber);
+          break;
+        }
         case 'session.ended': {
           const payload = message.payload as {
             leaderboard?: { rank: number; participantId?: string; nickname: string; score: number; rankChange?: number }[];
@@ -110,7 +126,7 @@ export default function HostSessionPage() {
         }
       }
     },
-    [addParticipant, setParticipantCount, setCurrentQuestion, setState, setRevealData, setLeaderboard, setFinalLeaderboard, setSessionSummary]
+    [addParticipant, setParticipantCount, setCurrentQuestion, setState, setRevealData, setLeaderboard, setFinalLeaderboard, setSessionSummary, updateLeaderboardEntries]
   );
 
   const { connectionState } = useWebSocket({
@@ -248,7 +264,17 @@ export default function HostSessionPage() {
       {state === 'REVEAL' && revealData && (
         <div className="w-full max-w-3xl">
           <AnswerReveal data={revealData} options={currentQuestion?.options || []} />
-          <Leaderboard entries={leaderboard} />
+          {leaderboardAnimation.currentEntries.length > 0 ? (
+            <AnimatedLeaderboard
+              entries={buildHostView(leaderboardAnimation.currentEntries)}
+              previousEntries={buildHostView(leaderboardAnimation.previousEntries)}
+              isHost={true}
+              roundNumber={leaderboardAnimation.roundNumber}
+              animationPhase={leaderboardAnimation.animationPhase}
+            />
+          ) : (
+            <Leaderboard entries={leaderboard} />
+          )}
           <div className="mt-6 text-center">
             <button onClick={handleNextQuestion} className="btn-primary px-8 py-3">
               Next Question

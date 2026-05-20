@@ -24,6 +24,8 @@ export interface RegisterRequest {
 }
 
 // ============ Quiz Types ============
+export type ScoringMode = 'SPEED_MATTERS' | 'BALANCED' | 'KNOWLEDGE_FIRST';
+
 export type QuestionType = 'MCQ' | 'TRUE_FALSE' | 'POLL';
 
 export interface QuestionOption {
@@ -51,6 +53,7 @@ export interface Quiz {
   description: string;
   coverImageUrl?: string;
   isPublished: boolean;
+  scoringMode?: ScoringMode;
   questions: Question[];
   createdAt: string;
   updatedAt: string;
@@ -187,6 +190,38 @@ export interface PagedHistoryResponse {
   totalSessions: number;
 }
 
+// ============ Leaderboard Animation Types ============
+export interface LeaderboardUpdateEntry {
+  participantId: string;
+  nickname: string;
+  cumulativeScore: number;
+  roundScore: number;
+  rank: number;
+  rankDelta: number;
+  streakCount: number;
+  streakMultiplier: number;
+}
+
+export interface ScoreBreakdown {
+  baseComponent: number;
+  speedBonus: number;
+  streakMultiplier: number;
+  totalScore: number;
+  speedPercentage: number;
+  isCorrect: boolean;
+}
+
+export type AnimationPhase = 'idle' | 'position' | 'score' | 'delta';
+
+export interface LeaderboardAnimationState {
+  previousEntries: LeaderboardUpdateEntry[];
+  currentEntries: LeaderboardUpdateEntry[];
+  lastSequenceNumber: number;
+  animationPhase: AnimationPhase;
+  roundScoreBreakdown: ScoreBreakdown | null;
+  roundNumber: number;
+}
+
 // ============ WebSocket Event Types ============
 export type WSEventType =
   | 'session.joined'
@@ -195,6 +230,7 @@ export type WSEventType =
   | 'question.closed'
   | 'question.reveal'
   | 'leaderboard.update'
+  | 'leaderboard.updated'
   | 'session.paused'
   | 'session.resumed'
   | 'session.ended'

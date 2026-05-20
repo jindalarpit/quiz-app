@@ -40,6 +40,11 @@ public class Quiz {
     @Column(name = "is_published", nullable = false)
     private Boolean isPublished;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scoring_mode", nullable = false, length = 20)
+    @Builder.Default
+    private ScoringMode scoringMode = ScoringMode.SPEED_MATTERS;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "settings", columnDefinition = "jsonb")
     private Map<String, Object> settings;

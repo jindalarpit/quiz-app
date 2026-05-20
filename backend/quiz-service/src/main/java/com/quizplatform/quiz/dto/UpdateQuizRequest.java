@@ -1,5 +1,6 @@
 package com.quizplatform.quiz.dto;
 
+import com.quizplatform.quiz.model.ScoringMode;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,4 +21,6 @@ public class UpdateQuizRequest {
 
     @Size(max = 500, message = "Cover image URL must not exceed 500 characters")
     private String coverImageUrl;
+
+    private ScoringMode scoringMode;
 }

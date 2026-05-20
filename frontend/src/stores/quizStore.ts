@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { api } from '@/lib/api';
-import type { Question, Quiz, QuizListItem } from '@/types';
+import type { Question, Quiz, QuizListItem, ScoringMode } from '@/types';
 
 interface QuizState {
   quizzes: QuizListItem[];
@@ -13,6 +13,7 @@ interface QuizState {
   fetchQuiz: (id: string) => Promise<void>;
   createQuiz: (title: string, description: string) => Promise<Quiz>;
   updateQuiz: (id: string, data: { title: string; description: string }) => Promise<void>;
+  updateScoringMode: (id: string, scoringMode: ScoringMode) => Promise<void>;
   deleteQuiz: (id: string) => Promise<void>;
   addQuestion: (quizId: string, question: Omit<Question, 'id' | 'quizId' | 'position'>) => Promise<void>;
   updateQuestion: (quizId: string, questionId: string, question: Partial<Question>) => Promise<void>;
@@ -96,6 +97,20 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     } catch (err: unknown) {
       const message = (err as { message?: string })?.message || 'Failed to delete quiz';
       set({ error: message, isLoading: false });
+    }
+  },
+
+  updateScoringMode: async (id: string, scoringMode: ScoringMode) => {
+    set({ error: null });
+    try {
+      await api.patch(`/api/quizzes/${id}`, { scoringMode });
+      const { currentQuiz } = get();
+      if (currentQuiz && currentQuiz.id === id) {
+        set({ currentQuiz: { ...currentQuiz, scoringMode } });
+      }
+    } catch (err: unknown) {
+      const message = (err as { message?: string })?.message || 'Failed to update scoring mode';
+      set({ error: message });
     }
   },
 

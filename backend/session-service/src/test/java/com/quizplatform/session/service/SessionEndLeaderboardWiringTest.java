@@ -46,6 +46,8 @@ class SessionEndLeaderboardWiringTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private QuizServiceClient quizServiceClient;
     @Mock private LeaderboardService leaderboardService;
+    @Mock private LeaderboardSnapshotService leaderboardSnapshotService;
+    @Mock private LeaderboardBroadcasterImpl leaderboardBroadcasterImpl;
     @Mock private HashOperations<String, Object, Object> hashOperations;
     @Mock private ZSetOperations<String, String> zSetOperations;
     @Mock private SetOperations<String, String> setOperations;
@@ -66,7 +68,9 @@ class SessionEndLeaderboardWiringTest {
                 sessionParticipantRepository,
                 redisTemplate,
                 quizServiceClient,
-                leaderboardService
+                leaderboardService,
+                leaderboardSnapshotService,
+                leaderboardBroadcasterImpl
         );
     }
 
@@ -179,6 +183,68 @@ class SessionEndLeaderboardWiringTest {
         verify(redisTemplate).convertAndSend(
                 eq("session:" + PIN + ":broadcast"),
                 contains("session.state_changed"));
+    }
+
+    @Test
+    @DisplayName("endSession should call deleteAllSnapshots for session cleanup")
+    void endSession_callsDeleteAllSnapshots() {
+        // Arrange
+        setupValidEndSessionMocks();
+
+        Session savedSession = Session.builder()
+                .id(SESSION_ID)
+                .pin(PIN)
+                .hostId(HOST_ID)
+                .quizId(UUID.randomUUID())
+                .status(SessionStatus.ENDED)
+                .startedAt(Instant.now().minusSeconds(300))
+                .endedAt(Instant.now())
+                .participantCount(3)
+                .build();
+
+        when(sessionRepository.save(any(Session.class))).thenReturn(savedSession);
+        when(redisSessionService.getLeaderboardSize(PIN)).thenReturn(3L);
+        when(redisSessionService.getTopNWithRankChanges(eq(PIN), eq(3)))
+                .thenReturn(createMockLeaderboardEntries(3));
+
+        // Act
+        sessionService.endSession(PIN, HOST_ID);
+
+        // Assert - deleteAllSnapshots should be called with the session PIN
+        verify(leaderboardSnapshotService).deleteAllSnapshots(PIN);
+    }
+
+    @Test
+    @DisplayName("endSession should still complete even if deleteAllSnapshots throws")
+    void endSession_handlesSnapshotCleanupFailureGracefully() {
+        // Arrange
+        setupValidEndSessionMocks();
+
+        Session savedSession = Session.builder()
+                .id(SESSION_ID)
+                .pin(PIN)
+                .hostId(HOST_ID)
+                .quizId(UUID.randomUUID())
+                .status(SessionStatus.ENDED)
+                .startedAt(Instant.now().minusSeconds(300))
+                .endedAt(Instant.now())
+                .participantCount(3)
+                .build();
+
+        when(sessionRepository.save(any(Session.class))).thenReturn(savedSession);
+        when(redisSessionService.getLeaderboardSize(PIN)).thenReturn(3L);
+        when(redisSessionService.getTopNWithRankChanges(eq(PIN), eq(3)))
+                .thenReturn(createMockLeaderboardEntries(3));
+
+        // Simulate snapshot cleanup failure
+        doThrow(new RuntimeException("Redis connection lost"))
+                .when(leaderboardSnapshotService).deleteAllSnapshots(PIN);
+
+        // Act - should not throw
+        sessionService.endSession(PIN, HOST_ID);
+
+        // Assert - session state was still updated to ENDED
+        verify(redisSessionService).updateSessionState(PIN, SessionStatus.ENDED.name());
     }
 
     private void setupValidEndSessionMocks() {

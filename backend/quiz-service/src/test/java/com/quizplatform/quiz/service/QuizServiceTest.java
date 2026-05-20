@@ -7,6 +7,7 @@ import com.quizplatform.quiz.dto.*;
 import com.quizplatform.quiz.model.Question;
 import com.quizplatform.quiz.model.QuestionType;
 import com.quizplatform.quiz.model.Quiz;
+import com.quizplatform.quiz.model.ScoringMode;
 import com.quizplatform.quiz.repository.QuestionRepository;
 import com.quizplatform.quiz.repository.QuizRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -439,5 +440,164 @@ class QuizServiceTest {
         assertThat(existing.getPoints()).isEqualTo(2000);
         assertThat(existing.getTimeLimitSeconds()).isEqualTo(20); // unchanged
         assertThat(existing.getCorrectAnswer()).isEqualTo("0"); // unchanged
+    }
+
+    // ==================== Scoring Mode Tests ====================
+    // Validates: Requirements 7.1, 7.6
+
+    @Test
+    void updateScoringMode_shouldUpdateToSpeedMatters() {
+        sampleQuiz.setScoringMode(ScoringMode.BALANCED);
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.SPEED_MATTERS)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenReturn(sampleQuiz);
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        QuizResponse response = quizService.updateScoringMode(quizId, ownerId, request);
+
+        assertThat(sampleQuiz.getScoringMode()).isEqualTo(ScoringMode.SPEED_MATTERS);
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.SPEED_MATTERS);
+        verify(quizRepository).save(sampleQuiz);
+    }
+
+    @Test
+    void updateScoringMode_shouldUpdateToBalanced() {
+        sampleQuiz.setScoringMode(ScoringMode.SPEED_MATTERS);
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenReturn(sampleQuiz);
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        QuizResponse response = quizService.updateScoringMode(quizId, ownerId, request);
+
+        assertThat(sampleQuiz.getScoringMode()).isEqualTo(ScoringMode.BALANCED);
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.BALANCED);
+        verify(quizRepository).save(sampleQuiz);
+    }
+
+    @Test
+    void updateScoringMode_shouldUpdateToKnowledgeFirst() {
+        sampleQuiz.setScoringMode(ScoringMode.SPEED_MATTERS);
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.KNOWLEDGE_FIRST)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenReturn(sampleQuiz);
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        QuizResponse response = quizService.updateScoringMode(quizId, ownerId, request);
+
+        assertThat(sampleQuiz.getScoringMode()).isEqualTo(ScoringMode.KNOWLEDGE_FIRST);
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.KNOWLEDGE_FIRST);
+        verify(quizRepository).save(sampleQuiz);
+    }
+
+    @Test
+    void updateScoringMode_shouldThrowForbiddenWhenNotOwner() {
+        UUID otherOwnerId = UUID.randomUUID();
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+
+        assertThatThrownBy(() -> quizService.updateScoringMode(quizId, otherOwnerId, request))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void updateScoringMode_shouldThrowNotFoundWhenQuizDoesNotExist() {
+        UUID nonExistentId = UUID.randomUUID();
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        when(quizRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> quizService.updateScoringMode(nonExistentId, ownerId, request))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateScoringMode_shouldPersistScoringModeCorrectly() {
+        UpdateScoringModeRequest request = UpdateScoringModeRequest.builder()
+                .scoringMode(ScoringMode.KNOWLEDGE_FIRST)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        quizService.updateScoringMode(quizId, ownerId, request);
+
+        ArgumentCaptor<Quiz> captor = ArgumentCaptor.forClass(Quiz.class);
+        verify(quizRepository).save(captor.capture());
+        assertThat(captor.getValue().getScoringMode()).isEqualTo(ScoringMode.KNOWLEDGE_FIRST);
+    }
+
+    @Test
+    void updateQuiz_shouldUpdateScoringModeWhenProvided() {
+        sampleQuiz.setScoringMode(ScoringMode.SPEED_MATTERS);
+        UpdateQuizRequest request = UpdateQuizRequest.builder()
+                .scoringMode(ScoringMode.BALANCED)
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenReturn(sampleQuiz);
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        QuizResponse response = quizService.updateQuiz(quizId, ownerId, request);
+
+        assertThat(sampleQuiz.getScoringMode()).isEqualTo(ScoringMode.BALANCED);
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.BALANCED);
+    }
+
+    @Test
+    void updateQuiz_shouldNotChangeScoringModeWhenNotProvided() {
+        sampleQuiz.setScoringMode(ScoringMode.KNOWLEDGE_FIRST);
+        UpdateQuizRequest request = UpdateQuizRequest.builder()
+                .title("New Title")
+                .build();
+
+        when(quizRepository.findById(quizId)).thenReturn(Optional.of(sampleQuiz));
+        when(quizRepository.save(any(Quiz.class))).thenReturn(sampleQuiz);
+        when(questionRepository.countByQuizId(quizId)).thenReturn(0);
+
+        QuizResponse response = quizService.updateQuiz(quizId, ownerId, request);
+
+        assertThat(sampleQuiz.getScoringMode()).isEqualTo(ScoringMode.KNOWLEDGE_FIRST);
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.KNOWLEDGE_FIRST);
+    }
+
+    @Test
+    void createQuiz_shouldDefaultToSpeedMattersMode() {
+        CreateQuizRequest request = CreateQuizRequest.builder()
+                .title("New Quiz")
+                .description("Description")
+                .build();
+
+        Quiz savedQuiz = Quiz.builder()
+                .id(quizId)
+                .ownerId(ownerId)
+                .title("New Quiz")
+                .description("Description")
+                .isPublished(false)
+                .scoringMode(ScoringMode.SPEED_MATTERS)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+
+        when(quizRepository.save(any(Quiz.class))).thenReturn(savedQuiz);
+
+        QuizResponse response = quizService.createQuiz(ownerId, request);
+
+        assertThat(response.getScoringMode()).isEqualTo(ScoringMode.SPEED_MATTERS);
     }
 }

@@ -1,5 +1,6 @@
 package com.quizplatform.quiz.dto;
 
+import com.quizplatform.quiz.model.ScoringMode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,6 +21,7 @@ public class QuizResponse {
     private String description;
     private String coverImageUrl;
     private Boolean isPublished;
+    private ScoringMode scoringMode;
     private Map<String, Object> settings;
     private int questionCount;
     private Instant createdAt;

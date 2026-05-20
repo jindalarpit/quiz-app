@@ -36,6 +36,9 @@ class AntiCheatIntegrationTest {
     @Mock
     private StringRedisTemplate redisTemplate;
 
+    @Mock
+    private DynamicScoreEngine dynamicScoreEngine;
+
     private AntiCheatService antiCheatService;
     private AnswerService answerService;
 
@@ -46,7 +49,7 @@ class AntiCheatIntegrationTest {
     @BeforeEach
     void setUp() {
         antiCheatService = new AntiCheatService(redisSessionService, redisTemplate);
-        answerService = new AnswerService(redisSessionService, scoreCalculator, antiCheatService, redisTemplate);
+        answerService = new AnswerService(redisSessionService, scoreCalculator, antiCheatService, dynamicScoreEngine, redisTemplate);
     }
 
     // ==================== Fast-Answer Detection Tests ====================

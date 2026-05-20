@@ -35,6 +35,18 @@ public class SessionController {
     }
 
     /**
+     * Get session info including current participants (host only).
+     */
+    @GetMapping("/{pin}")
+    public ResponseEntity<SessionInfoResponse> getSessionInfo(
+            @PathVariable String pin,
+            @RequestHeader("X-User-Id") UUID hostId) {
+
+        SessionInfoResponse response = sessionService.getSessionInfo(pin, hostId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Join a session with a nickname. No authentication required.
      */
     @PostMapping("/{pin}/join")

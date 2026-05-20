@@ -42,6 +42,8 @@ const config: Config = {
         'fade-in': 'fadeIn 0.2s ease-out',
         'pulse-score': 'pulseScore 0.5s ease-in-out',
         'rank-swap': 'rankSwap 0.6s ease-in-out',
+        'particle-burst': 'particleBurst 1000ms ease-out forwards',
+        'pulse-multiplier': 'pulseMultiplier 300ms ease-in-out',
       },
       keyframes: {
         slideIn: {
@@ -59,6 +61,15 @@ const config: Config = {
         rankSwap: {
           '0%': { transform: 'translateY(var(--rank-offset))' },
           '100%': { transform: 'translateY(0)' },
+        },
+        particleBurst: {
+          '0%': { transform: 'scale(0)', opacity: '1' },
+          '50%': { transform: 'scale(1.5)', opacity: '0.7' },
+          '100%': { transform: 'scale(2)', opacity: '0' },
+        },
+        pulseMultiplier: {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.3)' },
         },
       },
     },

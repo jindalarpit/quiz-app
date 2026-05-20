@@ -12,6 +12,7 @@ import com.quizplatform.session.dto.CreateSessionRequest;
 import com.quizplatform.session.dto.JoinSessionRequest;
 import com.quizplatform.session.dto.LeaderboardEntry;
 import com.quizplatform.session.dto.ParticipantResponse;
+import com.quizplatform.session.dto.SessionInfoResponse;
 import com.quizplatform.session.dto.SessionResponse;
 import com.quizplatform.session.model.Session;
 import com.quizplatform.session.model.SessionParticipant;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -45,20 +47,59 @@ public class SessionService {
     private final StringRedisTemplate redisTemplate;
     private final QuizServiceClient quizServiceClient;
     private final LeaderboardService leaderboardService;
+    private final LeaderboardSnapshotService leaderboardSnapshotService;
+    private final LeaderboardBroadcasterImpl leaderboardBroadcasterImpl;
 
     /**
-     * Start a new session: generate PIN, store in Redis, return response.
+     * Get session info including current participants (host only).
+     */
+    public SessionInfoResponse getSessionInfo(String pin, UUID hostId) {
+        validateHost(pin, hostId);
+
+        String state = redisSessionService.getSessionState(pin);
+        int participantCount = redisSessionService.getParticipantCount(pin);
+
+        // Get participant list from leaderboard sorted set
+        Set<String> participantIds = redisTemplate.opsForZSet().range("leaderboard:" + pin, 0, -1);
+        List<SessionInfoResponse.ParticipantInfo> participants = new ArrayList<>();
+        if (participantIds != null) {
+            for (String participantId : participantIds) {
+                String nickname = redisSessionService.getParticipantNickname(pin, participantId);
+                if (nickname != null) {
+                    participants.add(SessionInfoResponse.ParticipantInfo.builder()
+                            .id(participantId)
+                            .nickname(nickname)
+                            .build());
+                }
+            }
+        }
+
+        return SessionInfoResponse.builder()
+                .pin(pin)
+                .state(state)
+                .participantCount(participantCount)
+                .participants(participants)
+                .build();
+    }
+
+    /**
+     * Start a new session: generate PIN, fetch quiz scoring mode, store in Redis, return response.
      */
     public SessionResponse startSession(UUID hostId, CreateSessionRequest request) {
         String pin = redisSessionService.generateUniquePin();
 
         Map<String, Object> settings = request.getSettings();
-        redisSessionService.createSession(pin, request.getQuizId(), hostId, settings);
+
+        // Load scoring mode from quiz configuration (Requirement 7.7)
+        // The scoring mode is fixed for the entire session duration
+        String scoringMode = loadScoringModeFromQuiz(request.getQuizId());
+
+        redisSessionService.createSession(pin, request.getQuizId(), hostId, settings, scoringMode);
 
         UUID sessionId = UUID.randomUUID();
         Instant now = Instant.now();
 
-        log.info("Session started: pin={}, quizId={}, hostId={}", pin, request.getQuizId(), hostId);
+        log.info("Session started: pin={}, quizId={}, hostId={}, scoringMode={}", pin, request.getQuizId(), hostId, scoringMode);
 
         return SessionResponse.builder()
                 .id(sessionId)
@@ -70,6 +111,26 @@ public class SessionService {
                 .settings(settings)
                 .createdAt(now)
                 .build();
+    }
+
+    /**
+     * Load the scoring mode from the quiz configuration via quiz-service.
+     * Defaults to SPEED_MATTERS if the quiz cannot be fetched or has no scoring mode set.
+     *
+     * @param quizId the quiz UUID
+     * @return the scoring mode string (e.g., "SPEED_MATTERS", "BALANCED", "KNOWLEDGE_FIRST")
+     */
+    private String loadScoringModeFromQuiz(UUID quizId) {
+        try {
+            com.quizplatform.common.dto.QuizDTO quiz = quizServiceClient.getQuiz(quizId);
+            if (quiz != null && quiz.getScoringMode() != null && !quiz.getScoringMode().isBlank()) {
+                return quiz.getScoringMode().toUpperCase();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load scoring mode from quiz {}: {}. Defaulting to SPEED_MATTERS.",
+                    quizId, e.getMessage());
+        }
+        return "SPEED_MATTERS";
     }
 
     /**
@@ -304,6 +365,24 @@ public class SessionService {
                 // The session is already ended; ranking failure is handled by
                 // LeaderboardService's retry logic and failure event publishing
             }
+        }
+
+        // Delete all leaderboard snapshots for this session (cleanup on ENDED transition)
+        try {
+            leaderboardSnapshotService.deleteAllSnapshots(pin);
+        } catch (Exception e) {
+            log.warn("Failed to delete leaderboard snapshots for session: pin={}, error={}",
+                    pin, e.getMessage());
+            // Non-critical: snapshots will expire via TTL (4 hours)
+        }
+
+        // Discard all queued pending events for this session (Requirement 5.5)
+        try {
+            leaderboardBroadcasterImpl.discardPendingEvents(pin);
+        } catch (Exception e) {
+            log.warn("Failed to discard pending events for session: pin={}, error={}",
+                    pin, e.getMessage());
+            // Non-critical: pending events will expire via TTL (4 hours)
         }
 
         publishStateChangeEvent(pin, currentState, SessionStatus.ENDED.name());

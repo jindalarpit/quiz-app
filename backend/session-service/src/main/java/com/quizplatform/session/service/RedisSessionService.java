@@ -45,6 +45,20 @@ public class RedisSessionService {
      * Create a new session in Redis with all initial fields.
      */
     public void createSession(String pin, UUID quizId, UUID hostId, Map<String, Object> settings) {
+        createSession(pin, quizId, hostId, settings, null);
+    }
+
+    /**
+     * Create a new session in Redis with all initial fields including scoring mode.
+     * The scoring mode is loaded from the quiz configuration and remains fixed for the entire session duration.
+     *
+     * @param pin       session PIN
+     * @param quizId    quiz UUID
+     * @param hostId    host UUID
+     * @param settings  session settings
+     * @param scoringMode the quiz's configured scoring mode (stored as scoring_mode field)
+     */
+    public void createSession(String pin, UUID quizId, UUID hostId, Map<String, Object> settings, String scoringMode) {
         String key = sessionKey(pin);
 
         Map<String, String> fields = new HashMap<>();
@@ -59,6 +73,8 @@ public class RedisSessionService {
         fields.put("allow_late_join", getSettingOrDefault(settings, "allowLateJoin", "true"));
         fields.put("music_enabled", getSettingOrDefault(settings, "musicEnabled", "true"));
         fields.put("created_at", String.valueOf(Instant.now().toEpochMilli()));
+        // Store scoring mode - fixed for entire session duration (Requirement 7.7)
+        fields.put("scoring_mode", scoringMode != null ? scoringMode : "SPEED_MATTERS");
 
         redisTemplate.opsForHash().putAll(key, fields);
         redisTemplate.expire(key, Duration.ofSeconds(SESSION_TTL_SECONDS));
@@ -66,6 +82,18 @@ public class RedisSessionService {
         // Initialize nicknames set
         String nicknamesKey = nicknamesKey(pin);
         redisTemplate.expire(nicknamesKey, Duration.ofSeconds(SESSION_TTL_SECONDS));
+    }
+
+    /**
+     * Get the scoring mode for a session from the Redis session hash.
+     * The scoring mode is set once during session creation and remains fixed.
+     *
+     * @param pin session PIN
+     * @return the scoring mode string, defaults to "SPEED_MATTERS" if not set
+     */
+    public String getScoringMode(String pin) {
+        Object value = redisTemplate.opsForHash().get(sessionKey(pin), "scoring_mode");
+        return value != null ? value.toString() : "SPEED_MATTERS";
     }
 
     /**
@@ -117,18 +145,22 @@ public class RedisSessionService {
         fields.put("score", "0");
         fields.put("streak", "0");
         fields.put("multiplier", "1");
-        fields.put("last_answer_time", "0");
+        fields.put("last_answer_time", String.valueOf(Long.MAX_VALUE)); // For late-joining tiebreaker
         fields.put("is_connected", "false");
         fields.put("disconnect_time", "0");
         fields.put("is_flagged", "false");
         fields.put("is_kicked", "false");
         fields.put("fast_answer_count", "0");
+        // New fields for ranking tiebreakers (Requirement 4.6, 4.7)
+        fields.put("total_response_time_ms", "0");
+        fields.put("answered_rounds", "0");
 
         redisTemplate.opsForHash().putAll(participantKey, fields);
         redisTemplate.expire(participantKey, Duration.ofSeconds(SESSION_TTL_SECONDS));
 
-        // Add participant to leaderboard sorted set with initial score of 0
-        // This ensures all participants appear in the final leaderboard even if they never score
+        // Add participant to leaderboard sorted set with initial composite score
+        // Composite score = cumulativeScore × 1_000_000 + (MAX_TIME - avgResponseTimeMs)
+        // For new participants: score=0, avgResponseTime=MAX_TIME (worst), so composite = 0
         String leaderboardKeyStr = leaderboardKey(pin);
         redisTemplate.opsForZSet().add(leaderboardKeyStr, participantId.toString(), 0);
         redisTemplate.expire(leaderboardKeyStr, Duration.ofSeconds(SESSION_TTL_SECONDS));
@@ -621,6 +653,63 @@ public class RedisSessionService {
         Object value = redisTemplate.opsForHash().get(
                 "participant:" + pin + ":" + participantId, "is_connected");
         return "true".equals(value);
+    }
+
+    // ==================== Response Time Tracking Methods (Requirement 4.6, 4.7) ====================
+
+    /**
+     * Get the total response time for a participant across all answered rounds.
+     */
+    public long getTotalResponseTimeMs(String pin, String participantId) {
+        Object value = redisTemplate.opsForHash().get(
+                "participant:" + pin + ":" + participantId, "total_response_time_ms");
+        return value != null ? Long.parseLong(value.toString()) : 0;
+    }
+
+    /**
+     * Get the number of rounds a participant has answered.
+     */
+    public int getAnsweredRounds(String pin, String participantId) {
+        Object value = redisTemplate.opsForHash().get(
+                "participant:" + pin + ":" + participantId, "answered_rounds");
+        return value != null ? Integer.parseInt(value.toString()) : 0;
+    }
+
+    /**
+     * Record a response time for a participant after answering a question.
+     * Updates total_response_time_ms, answered_rounds, and last_answer_time.
+     * 
+     * @param pin session PIN
+     * @param participantId participant UUID
+     * @param responseTimeMs response time for this answer in milliseconds
+     * @param answerTimestamp timestamp when the answer was submitted
+     */
+    public void recordResponseTime(String pin, String participantId, long responseTimeMs, long answerTimestamp) {
+        String key = "participant:" + pin + ":" + participantId;
+        
+        // Increment total_response_time_ms
+        redisTemplate.opsForHash().increment(key, "total_response_time_ms", responseTimeMs);
+        
+        // Increment answered_rounds
+        redisTemplate.opsForHash().increment(key, "answered_rounds", 1);
+        
+        // Update last_answer_time for tiebreaker
+        redisTemplate.opsForHash().put(key, "last_answer_time", String.valueOf(answerTimestamp));
+    }
+
+    /**
+     * Calculate the average response time for a participant.
+     * Returns Long.MAX_VALUE if participant has not answered any questions (for proper tiebreaker ordering).
+     */
+    public long calculateAverageResponseTimeMs(String pin, String participantId) {
+        long totalResponseTime = getTotalResponseTimeMs(pin, participantId);
+        int answeredRounds = getAnsweredRounds(pin, participantId);
+        
+        if (answeredRounds == 0) {
+            return Long.MAX_VALUE; // Late-joining participants get worst average time
+        }
+        
+        return totalResponseTime / answeredRounds;
     }
 
     // ==================== Audit Logging Methods ====================

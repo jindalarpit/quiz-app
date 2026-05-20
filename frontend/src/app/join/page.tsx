@@ -3,14 +3,18 @@
 import { useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useState } from 'react';
 
+import { AnimatedLeaderboard } from '@/components/AnimatedLeaderboard';
 import { AnswerReveal } from '@/components/quiz/AnswerReveal';
 import { QuestionDisplay } from '@/components/quiz/QuestionDisplay';
 import { SessionEnd } from '@/components/quiz/SessionEnd';
+import { SpeedBonusIndicator } from '@/components/SpeedBonusIndicator';
 import { TimerDisplay } from '@/components/quiz/TimerDisplay';
 import { api } from '@/lib/api';
+import { buildParticipantDisplayView } from '@/lib/buildLeaderboardView';
+import { computeScoreBreakdown } from '@/lib/computeScoreBreakdown';
 import { useWebSocket } from '@/lib/useWebSocket';
 import { useSessionStore } from '@/stores/sessionStore';
-import type { WSMessage } from '@/types';
+import type { LeaderboardUpdateEntry, WSMessage } from '@/types';
 
 type JoinStep = 'pin' | 'nickname' | 'lobby' | 'playing';
 
@@ -33,6 +37,7 @@ export default function JoinPage() {
     myScore,
     finalLeaderboard,
     sessionSummary,
+    leaderboardAnimation,
     setPin,
     setParticipantId,
     setState,
@@ -45,6 +50,8 @@ export default function JoinPage() {
     setFinalLeaderboard,
     setSessionSummary,
     resetSession,
+    updateLeaderboardEntries,
+    setRoundScoreBreakdown,
   } = useSessionStore();
 
   const handleMessage = useCallback(
@@ -82,6 +89,24 @@ export default function JoinPage() {
           const payload = message.payload as { yourRank?: number; yourScore?: number };
           if (payload.yourRank !== undefined) setMyRank(payload.yourRank);
           if (payload.yourScore !== undefined) setMyScore(payload.yourScore);
+          break;
+        }
+        case 'leaderboard.updated': {
+          const payload = message.payload as {
+            sessionId: string;
+            roundNumber: number;
+            sequenceNumber: number;
+            timestamp: number;
+            entries: LeaderboardUpdateEntry[];
+          };
+          // Update store with new entries (handles sequence validation and stores previous entries)
+          const accepted = updateLeaderboardEntries(payload.entries, payload.sequenceNumber, payload.roundNumber);
+          if (accepted && participantId) {
+            // Find the current participant's entry to compute score breakdown
+            const myEntry = payload.entries.find((e) => e.participantId === participantId);
+            const breakdown = computeScoreBreakdown(myEntry);
+            setRoundScoreBreakdown(breakdown);
+          }
           break;
         }
         case 'answer.ack':
@@ -130,7 +155,7 @@ export default function JoinPage() {
           break;
       }
     },
-    [setState, setCurrentQuestion, setRevealData, setMyScore, setMyRank, setAnswerAcknowledged, setFinalLeaderboard, setSessionSummary, resetSession]
+    [setState, setCurrentQuestion, setRevealData, setMyScore, setMyRank, setAnswerAcknowledged, setFinalLeaderboard, setSessionSummary, resetSession, updateLeaderboardEntries, setRoundScoreBreakdown, participantId]
   );
 
   const { sendMessage } = useWebSocket({
@@ -347,12 +372,37 @@ export default function JoinPage() {
             options={currentQuestion?.options || []}
             selectedAnswer={selectedAnswer}
           />
-          {myScore !== null && (
+          {/* Speed bonus indicator for participant's score breakdown */}
+          {leaderboardAnimation.roundScoreBreakdown && (
+            <div className="mt-4">
+              <SpeedBonusIndicator
+                baseComponent={leaderboardAnimation.roundScoreBreakdown.baseComponent}
+                speedBonus={leaderboardAnimation.roundScoreBreakdown.speedBonus}
+                streakMultiplier={leaderboardAnimation.roundScoreBreakdown.streakMultiplier}
+                totalScore={leaderboardAnimation.roundScoreBreakdown.totalScore}
+                speedPercentage={leaderboardAnimation.roundScoreBreakdown.speedPercentage}
+                isCorrect={leaderboardAnimation.roundScoreBreakdown.isCorrect}
+              />
+            </div>
+          )}
+          {!leaderboardAnimation.roundScoreBreakdown && myScore !== null && (
             <div className="mt-4 text-center">
               <p className="text-2xl font-bold text-primary-600 animate-pulse-score">
                 +{revealData.yourScore || 0} points
               </p>
               <p className="text-sm text-slate-500">Total: {myScore}</p>
+            </div>
+          )}
+          {/* Animated leaderboard showing participant's context view */}
+          {leaderboardAnimation.currentEntries.length > 0 && participantId && (
+            <div className="mt-4">
+              <AnimatedLeaderboard
+                entries={buildParticipantDisplayView(leaderboardAnimation.currentEntries, participantId)}
+                previousEntries={buildParticipantDisplayView(leaderboardAnimation.previousEntries, participantId)}
+                isHost={false}
+                roundNumber={leaderboardAnimation.roundNumber}
+                animationPhase={leaderboardAnimation.animationPhase}
+              />
             </div>
           )}
         </div>

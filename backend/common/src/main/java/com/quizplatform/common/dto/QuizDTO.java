@@ -28,6 +28,7 @@ public class QuizDTO {
     private String description;
     private String coverImageUrl;
     private Boolean isPublished;
+    private String scoringMode;
     private Map<String, Object> settings;
     private List<QuestionDTO> questions;
     private Integer questionCount;
