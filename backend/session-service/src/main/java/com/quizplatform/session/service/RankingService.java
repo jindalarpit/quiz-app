@@ -42,8 +42,9 @@ public class RankingService {
     /**
      * Multiplier for cumulative score in composite score encoding.
      * Ensures cumulative score is the primary sort key.
+     * Must be greater than MAX_TIME to prevent tiebreaker overflow into cumulative score space.
      */
-    public static final long SCORE_MULTIPLIER = 1_000_000L;
+    public static final long SCORE_MULTIPLIER = 1_000_000_000L;
 
     private final StringRedisTemplate redisTemplate;
 

@@ -17,6 +17,21 @@ const config: Config = {
       '2xl': '1440px',
     },
     extend: {
+      spacing: {
+        'base': '4px',
+      },
+      borderRadius: {
+        'card': '1rem',
+        'pill': '9999px',
+        'input': '0.5rem',
+      },
+      transitionDuration: {
+        '75': '75ms',
+        '200': '200ms',
+        '250': '250ms',
+        '300': '300ms',
+        '1000': '1000ms',
+      },
       colors: {
         primary: {
           50: '#f0f9ff',

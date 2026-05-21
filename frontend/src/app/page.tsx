@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { FeatureTile } from '@/components/ui/FeatureTile';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function HomePage() {
@@ -52,83 +53,89 @@ export default function HomePage() {
           </h2>
 
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Feature 1 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-quiz-red to-red-600 text-white shadow-lg shadow-red-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Create Quizzes</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Multiple choice, true/false, and poll questions with customizable time limits and point values.
-              </p>
-            </div>
+              }
+              title="Create Quizzes"
+              description="Multiple choice, true/false, and poll questions with customizable time limits and point values."
+              href="/dashboard"
+              authRequired={true}
+              gradientFrom="#ef4444"
+              gradientTo="#dc2626"
+            />
 
-            {/* Feature 2 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-quiz-blue to-blue-700 text-white shadow-lg shadow-blue-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Play Live</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Host real-time sessions with up to 1000 participants. Share a PIN and start playing instantly.
-              </p>
-            </div>
+              }
+              title="Play Live"
+              description="Host real-time sessions with up to 1000 participants. Share a PIN and start playing instantly."
+              href="/join"
+              authRequired={false}
+              gradientFrom="#3b82f6"
+              gradientTo="#1d4ed8"
+            />
 
-            {/* Feature 3 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-quiz-green to-green-700 text-white shadow-lg shadow-green-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Compete & Win</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Real-time leaderboards, answer streaks with multipliers, and speed-based scoring.
-              </p>
-            </div>
+              }
+              title="Compete & Win"
+              description="Real-time leaderboards, answer streaks with multipliers, and speed-based scoring."
+              href="/join"
+              authRequired={false}
+              gradientFrom="#22c55e"
+              gradientTo="#15803d"
+            />
 
-            {/* Feature 4 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-quiz-yellow to-amber-600 text-white shadow-lg shadow-amber-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Synced Timers</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Server-authoritative timing ensures fair play. Everyone gets the exact same time window.
-              </p>
-            </div>
+              }
+              title="Synced Timers"
+              description="Server-authoritative timing ensures fair play. Everyone gets the exact same time window."
+              href="/join"
+              authRequired={false}
+              gradientFrom="#eab308"
+              gradientTo="#d97706"
+            />
 
-            {/* Feature 5 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 text-white shadow-lg shadow-purple-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Analytics</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Detailed reports after each session — question accuracy, response times, and participant engagement.
-              </p>
-            </div>
+              }
+              title="Analytics"
+              description="Detailed reports after each session — question accuracy, response times, and participant engagement."
+              href="/history"
+              authRequired={true}
+              gradientFrom="#a855f7"
+              gradientTo="#7e22ce"
+            />
 
-            {/* Feature 6 */}
-            <div className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-primary-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-lg shadow-pink-500/20">
+            <FeatureTile
+              icon={
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Mobile First</h3>
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Responsive design works on any device. Participants just need a phone and a PIN to join.
-              </p>
-            </div>
+              }
+              title="Mobile First"
+              description="Responsive design works on any device. Participants just need a phone and a PIN to join."
+              href="/join"
+              authRequired={false}
+              gradientFrom="#ec4899"
+              gradientTo="#e11d48"
+            />
           </div>
         </div>
       </section>

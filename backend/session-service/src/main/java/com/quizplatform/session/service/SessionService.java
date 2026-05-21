@@ -49,6 +49,7 @@ public class SessionService {
     private final LeaderboardService leaderboardService;
     private final LeaderboardSnapshotService leaderboardSnapshotService;
     private final LeaderboardBroadcasterImpl leaderboardBroadcasterImpl;
+    private final AnswerService answerService;
 
     /**
      * Get session info including current participants (host only).
@@ -229,12 +230,16 @@ public class SessionService {
         String quizIdStr = sessionFields.get("quiz_id") != null ? sessionFields.get("quiz_id").toString() : null;
 
         QuestionDTO question = null;
+        int totalQuestions = 0;
         if (quizIdStr != null) {
             try {
                 UUID quizId = UUID.fromString(quizIdStr);
                 List<QuestionDTO> questions = quizServiceClient.getQuestions(quizId, hostId);
-                if (questions != null && questionIndex < questions.size()) {
-                    question = questions.get(questionIndex);
+                if (questions != null) {
+                    totalQuestions = questions.size();
+                    if (questionIndex < questions.size()) {
+                        question = questions.get(questionIndex);
+                    }
                 }
             } catch (Exception e) {
                 log.error("Failed to fetch question for pin={}, questionIndex={}: {}", pin, questionIndex, e.getMessage());
@@ -262,7 +267,7 @@ public class SessionService {
         }
 
         // Broadcast question.start event
-        publishQuestionStartEvent(pin, question, durationMs, startTime);
+        publishQuestionStartEvent(pin, question, durationMs, startTime, questionIndex, totalQuestions);
 
         publishStateChangeEvent(pin, currentState, SessionStatus.QUESTION_OPEN.name());
 
@@ -318,6 +323,9 @@ public class SessionService {
 
     /**
      * Skip the current question (host only).
+     * After closing the question, automatically advances to REVEAL state by triggering
+     * score computation, answer reveal broadcast, and leaderboard update.
+     * This eliminates the need for a separate manual "Reveal Answer" action.
      */
     public void skipQuestion(String pin, UUID hostId) {
         validateHost(pin, hostId);
@@ -325,15 +333,19 @@ public class SessionService {
         String currentState = redisSessionService.getSessionState(pin);
         SessionStatus current = SessionStatus.valueOf(currentState);
 
-        // Skip closes the current question and advances
+        // Skip closes the current question and auto-advances to REVEAL
         if (current == SessionStatus.QUESTION_OPEN) {
             stateMachine.validateTransition(current, SessionStatus.QUESTION_CLOSED);
             redisSessionService.updateSessionState(pin, SessionStatus.QUESTION_CLOSED.name());
 
             publishStateChangeEvent(pin, currentState, SessionStatus.QUESTION_CLOSED.name());
+
+            // Auto-advance to REVEAL: trigger score computation, answer reveal broadcast,
+            // and leaderboard update. This merges QUESTION_CLOSED → REVEAL into a single operation.
+            answerService.revealAnswer(pin, hostId);
         }
 
-        log.info("Question skipped: pin={}, hostId={}", pin, hostId);
+        log.info("Question skipped and auto-revealed: pin={}, hostId={}", pin, hostId);
     }
 
     /**
@@ -505,7 +517,7 @@ public class SessionService {
         }
     }
 
-    private void publishQuestionStartEvent(String pin, QuestionDTO question, int durationMs, long serverTimestamp) {
+    private void publishQuestionStartEvent(String pin, QuestionDTO question, int durationMs, long serverTimestamp, int questionIndex, int totalQuestions) {
         try {
             String channel = "session:" + pin + ":broadcast";
             StringBuilder optionsJson = new StringBuilder("[");
@@ -521,13 +533,15 @@ public class SessionService {
             optionsJson.append("]");
 
             String event = String.format(
-                    "{\"type\":\"question.start\",\"payload\":{\"questionId\":\"%s\",\"text\":\"%s\",\"options\":%s,\"type\":\"%s\",\"timeLimit\":%d,\"serverTimestamp\":%d}}",
+                    "{\"type\":\"question.start\",\"payload\":{\"questionId\":\"%s\",\"text\":\"%s\",\"options\":%s,\"type\":\"%s\",\"timeLimit\":%d,\"serverTimestamp\":%d,\"questionNumber\":%d,\"totalQuestions\":%d}}",
                     question.getId(),
                     question.getText().replace("\"", "\\\""),
                     optionsJson,
                     question.getType(),
                     question.getTimeLimitSeconds() != null ? question.getTimeLimitSeconds() : (durationMs / 1000),
-                    serverTimestamp
+                    serverTimestamp,
+                    questionIndex + 1,
+                    totalQuestions
             );
             redisTemplate.convertAndSend(channel, event);
             log.debug("Question start event published: pin={}, questionId={}", pin, question.getId());

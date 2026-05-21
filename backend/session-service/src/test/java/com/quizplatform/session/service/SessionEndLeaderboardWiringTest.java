@@ -48,6 +48,7 @@ class SessionEndLeaderboardWiringTest {
     @Mock private LeaderboardService leaderboardService;
     @Mock private LeaderboardSnapshotService leaderboardSnapshotService;
     @Mock private LeaderboardBroadcasterImpl leaderboardBroadcasterImpl;
+    @Mock private AnswerService answerService;
     @Mock private HashOperations<String, Object, Object> hashOperations;
     @Mock private ZSetOperations<String, String> zSetOperations;
     @Mock private SetOperations<String, String> setOperations;
@@ -70,7 +71,8 @@ class SessionEndLeaderboardWiringTest {
                 quizServiceClient,
                 leaderboardService,
                 leaderboardSnapshotService,
-                leaderboardBroadcasterImpl
+                leaderboardBroadcasterImpl,
+                answerService
         );
     }
 

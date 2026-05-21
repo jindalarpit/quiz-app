@@ -15,7 +15,7 @@ interface QuizState {
   updateQuiz: (id: string, data: { title: string; description: string }) => Promise<void>;
   updateScoringMode: (id: string, scoringMode: ScoringMode) => Promise<void>;
   deleteQuiz: (id: string) => Promise<void>;
-  addQuestion: (quizId: string, question: Omit<Question, 'id' | 'quizId' | 'position'>) => Promise<void>;
+  addQuestion: (quizId: string, question: Omit<Question, 'id' | 'quizId' | 'position'>) => Promise<Question | undefined>;
   updateQuestion: (quizId: string, questionId: string, question: Partial<Question>) => Promise<void>;
   deleteQuestion: (quizId: string, questionId: string) => Promise<void>;
   reorderQuestions: (quizId: string, questionIds: string[]) => Promise<void>;
@@ -121,9 +121,11 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       if (currentQuiz && currentQuiz.id === quizId) {
         set({ currentQuiz: { ...currentQuiz, questions: [...currentQuiz.questions, newQuestion] } });
       }
+      return newQuestion;
     } catch (err: unknown) {
       const message = (err as { message?: string })?.message || 'Failed to add question';
       set({ error: message });
+      return undefined;
     }
   },
 

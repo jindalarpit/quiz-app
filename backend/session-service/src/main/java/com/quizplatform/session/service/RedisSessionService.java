@@ -303,6 +303,7 @@ public class RedisSessionService {
 
     /**
      * Get the top N participants from the leaderboard.
+     * Extracts the actual cumulative score from the composite score before returning to clients.
      */
     public List<LeaderboardEntry> getTopN(String pin, int n) {
         String key = leaderboardKey(pin);
@@ -317,7 +318,9 @@ public class RedisSessionService {
         long rank = 1;
         for (ZSetOperations.TypedTuple<String> tuple : results) {
             String participantId = tuple.getValue();
-            double score = tuple.getScore() != null ? tuple.getScore() : 0;
+            double rawScore = tuple.getScore() != null ? tuple.getScore() : 0;
+            // Extract cumulative score from composite score (composite = cumulative × SCORE_MULTIPLIER + tiebreaker)
+            long cumulativeScore = (long) (rawScore / RankingService.SCORE_MULTIPLIER);
             String nickname = getParticipantNickname(pin, participantId);
             int streak = getStreak(pin, participantId);
             int multiplier = getMultiplier(pin, participantId);
@@ -325,7 +328,7 @@ public class RedisSessionService {
             entries.add(LeaderboardEntry.builder()
                     .participantId(participantId)
                     .nickname(nickname != null ? nickname : participantId)
-                    .score(score)
+                    .score(cumulativeScore)
                     .rank(rank)
                     .rankChange(0) // rank change tracking can be added later
                     .streak(streak)
@@ -345,11 +348,13 @@ public class RedisSessionService {
     }
 
     /**
-     * Get the total score of a participant from the leaderboard.
+     * Get the total cumulative score of a participant from the leaderboard.
+     * Extracts the actual cumulative score from the composite score.
      */
     public double getParticipantScore(String pin, String participantId) {
         Double score = redisTemplate.opsForZSet().score(leaderboardKey(pin), participantId);
-        return score != null ? score : 0;
+        double rawScore = score != null ? score : 0;
+        return (long) (rawScore / RankingService.SCORE_MULTIPLIER);
     }
 
     /**
@@ -420,6 +425,7 @@ public class RedisSessionService {
 
     /**
      * Get a participant-centric leaderboard view showing own rank, score, and neighbors.
+     * Extracts the actual cumulative score from the composite score before returning to clients.
      */
     public ParticipantLeaderboardView getParticipantView(String pin, String participantId) {
         String key = leaderboardKey(pin);
@@ -428,9 +434,10 @@ public class RedisSessionService {
         Long rankZero = redisTemplate.opsForZSet().reverseRank(key, participantId);
         long ownRank = rankZero != null ? rankZero + 1 : -1;
 
-        // Get own score
+        // Get own score - extract cumulative from composite
         Double score = redisTemplate.opsForZSet().score(key, participantId);
-        double ownScore = score != null ? score : 0;
+        double rawOwnScore = score != null ? score : 0;
+        long ownScore = (long) (rawOwnScore / RankingService.SCORE_MULTIPLIER);
 
         // Get rank change
         long rankChange = getRankChange(pin, participantId);
@@ -443,12 +450,13 @@ public class RedisSessionService {
             if (aboveSet != null && !aboveSet.isEmpty()) {
                 ZSetOperations.TypedTuple<String> tuple = aboveSet.iterator().next();
                 String aboveId = tuple.getValue();
-                double aboveScore = tuple.getScore() != null ? tuple.getScore() : 0;
+                double aboveRawScore = tuple.getScore() != null ? tuple.getScore() : 0;
+                long aboveCumulativeScore = (long) (aboveRawScore / RankingService.SCORE_MULTIPLIER);
                 String aboveNickname = getParticipantNickname(pin, aboveId);
                 above = LeaderboardEntry.builder()
                         .participantId(aboveId)
                         .nickname(aboveNickname != null ? aboveNickname : aboveId)
-                        .score(aboveScore)
+                        .score(aboveCumulativeScore)
                         .rank(ownRank - 1)
                         .rankChange(getRankChange(pin, aboveId))
                         .build();
@@ -463,12 +471,13 @@ public class RedisSessionService {
             if (belowSet != null && !belowSet.isEmpty()) {
                 ZSetOperations.TypedTuple<String> tuple = belowSet.iterator().next();
                 String belowId = tuple.getValue();
-                double belowScore = tuple.getScore() != null ? tuple.getScore() : 0;
+                double belowRawScore = tuple.getScore() != null ? tuple.getScore() : 0;
+                long belowCumulativeScore = (long) (belowRawScore / RankingService.SCORE_MULTIPLIER);
                 String belowNickname = getParticipantNickname(pin, belowId);
                 below = LeaderboardEntry.builder()
                         .participantId(belowId)
                         .nickname(belowNickname != null ? belowNickname : belowId)
-                        .score(belowScore)
+                        .score(belowCumulativeScore)
                         .rank(ownRank + 1)
                         .rankChange(getRankChange(pin, belowId))
                         .build();
@@ -538,6 +547,7 @@ public class RedisSessionService {
 
     /**
      * Get the top N participants with rank change information populated.
+     * Extracts the actual cumulative score from the composite score before returning to clients.
      */
     public List<LeaderboardEntry> getTopNWithRankChanges(String pin, int n) {
         String key = leaderboardKey(pin);
@@ -552,7 +562,9 @@ public class RedisSessionService {
         long rank = 1;
         for (ZSetOperations.TypedTuple<String> tuple : results) {
             String participantId = tuple.getValue();
-            double entryScore = tuple.getScore() != null ? tuple.getScore() : 0;
+            double rawScore = tuple.getScore() != null ? tuple.getScore() : 0;
+            // Extract cumulative score from composite score (composite = cumulative × SCORE_MULTIPLIER + tiebreaker)
+            long cumulativeScore = (long) (rawScore / RankingService.SCORE_MULTIPLIER);
             String nickname = getParticipantNickname(pin, participantId);
             int streak = getStreak(pin, participantId);
             int multiplier = getMultiplier(pin, participantId);
@@ -561,7 +573,7 @@ public class RedisSessionService {
             entries.add(LeaderboardEntry.builder()
                     .participantId(participantId)
                     .nickname(nickname != null ? nickname : participantId)
-                    .score(entryScore)
+                    .score(cumulativeScore)
                     .rank(rank)
                     .rankChange(rankDelta)
                     .streak(streak)

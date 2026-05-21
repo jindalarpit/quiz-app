@@ -3,7 +3,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/lib/api';
+import { formatDateBadge } from '@/lib/formatDateBadge';
+import { formatDuration } from '@/lib/formatDuration';
 import { cn } from '@/lib/utils';
+import { validateDateRange } from '@/lib/validateDateRange';
 import type { PagedHistoryResponse, SessionHistoryEntry } from '@/types';
 
 const PAGE_SIZE = 20;
@@ -43,6 +46,9 @@ export function QuizHistoryPage({ onSessionSelect }: QuizHistoryPageProps) {
     endDate: '',
     search: '',
   });
+
+  // Date range validation error
+  const [dateRangeError, setDateRangeError] = useState<string | null>(null);
 
   const fetchHistory = useCallback(
     async (page: number, currentFilters: QuizHistoryFilters) => {
@@ -105,6 +111,15 @@ export function QuizHistoryPage({ onSessionSelect }: QuizHistoryPageProps) {
   );
 
   const handleApplyFilters = useCallback(() => {
+    // Validate date range before submitting
+    if (filters.startDate && filters.endDate) {
+      const validation = validateDateRange(filters.startDate, filters.endDate);
+      if (!validation.valid) {
+        setDateRangeError(validation.error || 'Invalid date range');
+        return;
+      }
+    }
+    setDateRangeError(null);
     setAppliedFilters({ ...filters });
     setCurrentPage(0);
     fetchHistory(0, filters);
@@ -114,6 +129,7 @@ export function QuizHistoryPage({ onSessionSelect }: QuizHistoryPageProps) {
     const cleared: QuizHistoryFilters = { startDate: '', endDate: '', search: '' };
     setFilters(cleared);
     setAppliedFilters(cleared);
+    setDateRangeError(null);
     setCurrentPage(0);
     fetchHistory(0, cleared);
   }, [fetchHistory]);
@@ -167,43 +183,56 @@ export function QuizHistoryPage({ onSessionSelect }: QuizHistoryPageProps) {
           </div>
 
           {/* Date range */}
-          <div className="flex gap-2">
-            <div>
-              <label
-                htmlFor="history-start-date"
-                className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
-              >
-                From
-              </label>
-              <input
-                id="history-start-date"
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, startDate: e.target.value }))
-                }
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
-                aria-label="Start date filter"
-              />
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-2">
+              <div>
+                <label
+                  htmlFor="history-start-date"
+                  className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+                >
+                  From
+                </label>
+                <input
+                  id="history-start-date"
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) => {
+                    setFilters((prev) => ({ ...prev, startDate: e.target.value }));
+                    setDateRangeError(null);
+                  }}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                  aria-label="Start date filter"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="history-end-date"
+                  className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+                >
+                  To
+                </label>
+                <input
+                  id="history-end-date"
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) => {
+                    setFilters((prev) => ({ ...prev, endDate: e.target.value }));
+                    setDateRangeError(null);
+                  }}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                  aria-label="End date filter"
+                />
+              </div>
             </div>
-            <div>
-              <label
-                htmlFor="history-end-date"
-                className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+            {dateRangeError && (
+              <p
+                className="text-xs font-medium text-red-600 dark:text-red-400"
+                role="alert"
+                data-testid="date-range-error"
               >
-                To
-              </label>
-              <input
-                id="history-end-date"
-                type="date"
-                value={filters.endDate}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, endDate: e.target.value }))
-                }
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
-                aria-label="End date filter"
-              />
-            </div>
+                {dateRangeError}
+              </p>
+            )}
           </div>
 
           {/* Action buttons */}
@@ -381,28 +410,20 @@ function SessionCard({
   session: SessionHistoryEntry;
   onClick?: () => void;
 }) {
+  const dateBadge = formatDateBadge(session.endedAt);
+
   const endDate = new Date(session.endedAt);
-  const formattedDate = endDate.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
   const formattedTime = endDate.toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
   });
 
-  const durationMinutes = Math.floor(session.durationSeconds / 60);
-  const durationSecs = session.durationSeconds % 60;
-  const durationDisplay =
-    durationMinutes > 0
-      ? `${durationMinutes}m ${durationSecs}s`
-      : `${durationSecs}s`;
+  const durationDisplay = formatDuration(session.durationSeconds);
 
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-700 dark:hover:bg-indigo-900/20"
+      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition-[background-color,border-color] duration-150 hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-700 dark:hover:bg-indigo-900/20"
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
@@ -410,10 +431,22 @@ function SessionCard({
             {session.quizTitle}
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            <span>
-              {formattedDate} at {formattedTime}
+            <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+              {dateBadge}
             </span>
-            <span>{session.participantCount} participants</span>
+            <span>{formattedTime}</span>
+            <span className="inline-flex items-center gap-1">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3.5 w-3.5"
+                aria-hidden="true"
+              >
+                <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
+              </svg>
+              {session.participantCount} participants
+            </span>
             <span>{durationDisplay}</span>
           </div>
         </div>

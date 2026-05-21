@@ -210,7 +210,7 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
      *   + 1 below (omitting above if ranked 6th since rank 5 is already
      *   in top 5, omitting below if ranked last)
      */
-    List<ParticipantRoundScore> constructParticipantView(
+    public List<ParticipantRoundScore> constructParticipantView(
             List<ParticipantRoundScore> allScores,
             ParticipantRoundScore participant) {
 
@@ -289,7 +289,7 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
     /**
      * Build the JSON event payload for a leaderboard.updated event.
      */
-    String buildEventPayload(String pin, RoundResult result,
+    public String buildEventPayload(String pin, RoundResult result,
             List<ParticipantRoundScore> entries, long sequenceNumber) {
         try {
             Map<String, Object> event = new LinkedHashMap<>();
@@ -341,7 +341,7 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
      * @param targetId "host" for host channel, or participantId
      * @param payload JSON event payload
      */
-    void deliverWithRetry(String pin, String targetId, String payload) {
+    public void deliverWithRetry(String pin, String targetId, String payload) {
         String channel = resolveChannel(pin, targetId);
 
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -413,7 +413,7 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
      * Get the next monotonically increasing sequence number for a
      * session. Uses AtomicLong per session for thread-safe increment.
      */
-    long getNextSequenceNumber(String pin) {
+    public long getNextSequenceNumber(String pin) {
         return sequenceCounters
                 .computeIfAbsent(pin, k -> new AtomicLong(0))
                 .incrementAndGet();

@@ -1,9 +1,14 @@
 'use client';
 
+import { AnimatePresence, motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { MediaUploadWidget } from '@/components/quiz/MediaUploadWidget';
 import { ScoringModeSelector } from '@/components/quiz/ScoringModeSelector';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { api } from '@/lib/api';
+import { ANIMATION_TIMING } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useQuizStore } from '@/stores/quizStore';
 import type { QuestionType, ScoringMode } from '@/types';
@@ -15,10 +20,27 @@ interface QuestionFormData {
   correctAnswer: string | null;
   timeLimitSeconds: number;
   points: number;
+  mediaUrl?: string;
+  pendingFile?: File;
 }
 
 const TIME_LIMITS = [5, 10, 15, 20, 30, 60];
 const POINT_VALUES = [1000, 2000];
+
+/** Left-border colors for answer options (red, blue, green, yellow) */
+const OPTION_BORDER_COLORS = [
+  'border-l-quiz-red',
+  'border-l-quiz-blue',
+  'border-l-quiz-green',
+  'border-l-quiz-yellow',
+];
+
+/** Type indicator badge colors */
+const TYPE_BADGE_COLORS: Record<QuestionType, string> = {
+  MCQ: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300',
+  TRUE_FALSE: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  POLL: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+};
 
 function getDefaultOptions(type: QuestionType) {
   if (type === 'TRUE_FALSE') {
@@ -41,6 +63,7 @@ export default function QuizEditorPage() {
   const quizId = params.id as string;
   const { user } = useAuthStore();
   const { currentQuiz, isLoading, fetchQuiz, updateQuiz, updateScoringMode, addQuestion, updateQuestion, deleteQuestion } = useQuizStore();
+  const reducedMotion = useReducedMotion();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -55,6 +78,9 @@ export default function QuizEditorPage() {
     timeLimitSeconds: 20,
     points: 1000,
   });
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -88,24 +114,86 @@ export default function QuizEditorPage() {
       options: getDefaultOptions(type),
       correctAnswer: null,
       points: type === 'POLL' ? 0 : questionForm.points,
+      mediaUrl: questionForm.mediaUrl,
+      pendingFile: questionForm.pendingFile,
     });
+  };
+
+  const uploadImage = async (questionId: string, file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.request<{ url: string }>(
+      `/api/quizzes/${quizId}/questions/${questionId}/image`,
+      {
+        method: 'POST',
+        body: formData,
+        headers: {}, // Let browser set Content-Type with boundary for multipart
+      }
+    );
+    return response.url;
   };
 
   const handleAddQuestion = async () => {
     if (!questionForm.text.trim()) return;
-    await addQuestion(quizId, {
+    if (isImageUploading) return;
+
+    setUploadError(null);
+
+    const newQuestion = await addQuestion(quizId, {
       type: questionForm.type,
       text: questionForm.text,
       options: questionForm.options.filter((o) => o.text.trim()),
       correctAnswer: questionForm.type === 'POLL' ? null : questionForm.correctAnswer,
       timeLimitSeconds: questionForm.timeLimitSeconds,
       points: questionForm.type === 'POLL' ? 0 : questionForm.points,
+      mediaUrl: questionForm.mediaUrl,
     });
+
+    // If there's a pending file, upload it after the question is created
+    if (questionForm.pendingFile && newQuestion) {
+      setIsImageUploading(true);
+      try {
+        const url = await uploadImage(newQuestion.id, questionForm.pendingFile);
+        // Update the question with the uploaded image URL
+        await updateQuestion(quizId, newQuestion.id, { mediaUrl: url });
+      } catch {
+        setUploadError('Image upload failed. The question was saved without the image.');
+        setIsImageUploading(false);
+        return;
+      }
+      setIsImageUploading(false);
+    }
+
+    // Track newly added question for entrance animation
+    if (newQuestion) {
+      setNewlyAddedId(newQuestion.id);
+      setTimeout(() => setNewlyAddedId(null), 500);
+    }
+
     setShowAddForm(false);
     resetForm();
   };
 
   const handleUpdateQuestion = async (questionId: string) => {
+    if (isImageUploading) return;
+
+    setUploadError(null);
+
+    // If there's a pending file, upload it first
+    let mediaUrl = questionForm.mediaUrl;
+    if (questionForm.pendingFile) {
+      setIsImageUploading(true);
+      try {
+        mediaUrl = await uploadImage(questionId, questionForm.pendingFile);
+      } catch {
+        setUploadError('Image upload failed. Please try again or remove the image.');
+        setIsImageUploading(false);
+        return;
+      }
+      setIsImageUploading(false);
+    }
+
     await updateQuestion(quizId, questionId, {
       type: questionForm.type,
       text: questionForm.text,
@@ -113,6 +201,7 @@ export default function QuizEditorPage() {
       correctAnswer: questionForm.type === 'POLL' ? null : questionForm.correctAnswer,
       timeLimitSeconds: questionForm.timeLimitSeconds,
       points: questionForm.type === 'POLL' ? 0 : questionForm.points,
+      mediaUrl,
     });
     setEditingQuestion(null);
     resetForm();
@@ -134,9 +223,12 @@ export default function QuizEditorPage() {
       correctAnswer: q.correctAnswer,
       timeLimitSeconds: q.timeLimitSeconds,
       points: q.points,
+      mediaUrl: q.mediaUrl,
+      pendingFile: undefined,
     });
     setEditingQuestion(questionId);
     setShowAddForm(false);
+    setUploadError(null);
   };
 
   const resetForm = () => {
@@ -147,7 +239,10 @@ export default function QuizEditorPage() {
       correctAnswer: null,
       timeLimitSeconds: 20,
       points: 1000,
+      mediaUrl: undefined,
+      pendingFile: undefined,
     });
+    setUploadError(null);
   };
 
   if (!user || isLoading) {
@@ -159,6 +254,16 @@ export default function QuizEditorPage() {
   }
 
   if (!currentQuiz) return null;
+
+  // Animation variants for new question card entrance
+  const cardEntranceVariants = {
+    hidden: { opacity: 0, y: -20 },
+    visible: { opacity: 1, y: 0 },
+  };
+
+  const cardTransition = reducedMotion
+    ? { duration: 0 }
+    : { duration: ANIMATION_TIMING.cardEntrance / 1000, ease: 'easeOut' };
 
   return (
     <div className="py-8">
@@ -220,45 +325,70 @@ export default function QuizEditorPage() {
           </button>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {currentQuiz.questions.map((q, index) => (
-            <div key={q.id} className="card">
-              {editingQuestion === q.id ? (
-                <QuestionForm
-                  form={questionForm}
-                  setForm={setQuestionForm}
-                  onTypeChange={handleTypeChange}
-                  onSave={() => handleUpdateQuestion(q.id)}
-                  onCancel={() => {
-                    setEditingQuestion(null);
-                    resetForm();
-                  }}
-                  saveLabel="Update"
-                />
-              ) : (
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-500">Q{index + 1}</span>
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                        {q.type}
-                      </span>
-                      <span className="text-xs text-slate-500">{q.timeLimitSeconds}s • {q.points}pts</span>
+        {/* Question cards with minimum 8px (gap-2) vertical spacing */}
+        <div className="mt-4 space-y-3" style={{ gap: '8px' }}>
+          <AnimatePresence initial={false}>
+            {currentQuiz.questions.map((q, index) => {
+              const isNewlyAdded = q.id === newlyAddedId;
+              return (
+                <motion.div
+                  key={q.id}
+                  data-question-card
+                  data-question-index={index}
+                  variants={cardEntranceVariants}
+                  initial={isNewlyAdded ? 'hidden' : false}
+                  animate="visible"
+                  transition={cardTransition}
+                  className="card"
+                >
+                  {editingQuestion === q.id ? (
+                    <QuestionForm
+                      form={questionForm}
+                      setForm={setQuestionForm}
+                      onTypeChange={handleTypeChange}
+                      onSave={() => handleUpdateQuestion(q.id)}
+                      onCancel={() => {
+                        setEditingQuestion(null);
+                        resetForm();
+                      }}
+                      saveLabel="Update"
+                      isUploading={isImageUploading}
+                      uploadError={uploadError}
+                      reducedMotion={reducedMotion}
+                    />
+                  ) : (
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {/* Numbered badge */}
+                          <span
+                            data-badge={`Q${index + 1}`}
+                            className="inline-flex h-6 w-8 items-center justify-center rounded-md bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                          >
+                            Q{index + 1}
+                          </span>
+                          {/* Type indicator label with colored background */}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE_COLORS[q.type]}`}>
+                            {q.type.replace('_', '/')}
+                          </span>
+                          <span className="text-xs text-slate-500">{q.timeLimitSeconds}s • {q.points}pts</span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-900 dark:text-white">{q.text}</p>
+                      </div>
+                      <div className="ml-4 flex gap-2">
+                        <button onClick={() => startEditing(q.id)} className="text-xs text-primary-600 hover:text-primary-700">
+                          Edit
+                        </button>
+                        <button onClick={() => handleDeleteQuestion(q.id)} className="text-xs text-red-600 hover:text-red-700">
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm text-slate-900 dark:text-white">{q.text}</p>
-                  </div>
-                  <div className="ml-4 flex gap-2">
-                    <button onClick={() => startEditing(q.id)} className="text-xs text-primary-600 hover:text-primary-700">
-                      Edit
-                    </button>
-                    <button onClick={() => handleDeleteQuestion(q.id)} className="text-xs text-red-600 hover:text-red-700">
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
 
         {/* Add Question Form */}
@@ -274,6 +404,9 @@ export default function QuizEditorPage() {
                 resetForm();
               }}
               saveLabel="Add Question"
+              isUploading={isImageUploading}
+              uploadError={uploadError}
+              reducedMotion={reducedMotion}
             />
           </div>
         )}
@@ -289,6 +422,9 @@ function QuestionForm({
   onSave,
   onCancel,
   saveLabel,
+  isUploading,
+  uploadError,
+  reducedMotion,
 }: {
   form: QuestionFormData;
   setForm: (f: QuestionFormData) => void;
@@ -296,19 +432,35 @@ function QuestionForm({
   onSave: () => void;
   onCancel: () => void;
   saveLabel: string;
+  isUploading?: boolean;
+  uploadError?: string | null;
+  reducedMotion?: boolean;
 }) {
+  /**
+   * Get the left border color class for an option at the given index.
+   * For TRUE_FALSE questions, only red and blue are used.
+   */
+  const getOptionBorderColor = (index: number): string => {
+    if (form.type === 'TRUE_FALSE') {
+      return index === 0 ? OPTION_BORDER_COLORS[0] : OPTION_BORDER_COLORS[1];
+    }
+    return OPTION_BORDER_COLORS[index] || OPTION_BORDER_COLORS[0];
+  };
+
   return (
     <div className="space-y-4">
-      {/* Type selector */}
-      <div className="flex gap-2">
+      {/* Type selector - pill-shaped buttons */}
+      <div className="flex gap-2" role="group" aria-label="Question type">
         {(['MCQ', 'TRUE_FALSE', 'POLL'] as QuestionType[]).map((type) => (
           <button
             key={type}
             onClick={() => onTypeChange(type)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-pill px-4 py-1.5 text-xs font-medium transition-colors ${
+              reducedMotion ? '' : 'duration-200'
+            } ${
               form.type === type
-                ? 'bg-primary-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+                ? 'bg-primary-600 text-white shadow-sm'
+                : 'border border-primary-300 bg-transparent text-primary-600 hover:border-primary-500 hover:text-primary-700 dark:border-primary-600 dark:text-primary-400 dark:hover:border-primary-400'
             }`}
           >
             {type.replace('_', '/')}
@@ -328,35 +480,72 @@ function QuestionForm({
         />
       </div>
 
-      {/* Options */}
+      {/* Image upload */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Image (optional)</label>
+        <div className="mt-1">
+          <MediaUploadWidget
+            currentMediaUrl={form.mediaUrl}
+            onMediaChange={(url) => {
+              setForm({ ...form, mediaUrl: url, pendingFile: url ? form.pendingFile : undefined });
+            }}
+            onFileSelect={(file) => {
+              setForm({ ...form, pendingFile: file });
+            }}
+            isUploading={isUploading}
+          />
+        </div>
+        {uploadError && (
+          <p className="mt-1 text-sm text-red-600" role="alert">
+            {uploadError}
+          </p>
+        )}
+      </div>
+
+      {/* Options with colored left borders */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Options</label>
-        {form.options.map((option, idx) => (
-          <div key={option.id} className="flex items-center gap-2">
-            {form.type !== 'POLL' && (
+        {form.options.map((option, idx) => {
+          const isCorrect = form.correctAnswer === option.id;
+          const borderColorClass = getOptionBorderColor(idx);
+
+          return (
+            <div
+              key={option.id}
+              data-option-index={idx}
+              className={`flex items-center gap-2 rounded-md border-l-4 pl-3 py-1.5 transition-colors ${
+                reducedMotion ? '' : 'duration-200'
+              } ${borderColorClass} ${
+                isCorrect && form.type !== 'POLL'
+                  ? 'bg-primary-50/60 dark:bg-primary-900/20'
+                  : ''
+              }`}
+            >
+              {form.type !== 'POLL' && (
+                <input
+                  type="radio"
+                  name="correctAnswer"
+                  checked={form.correctAnswer === option.id}
+                  onChange={() => setForm({ ...form, correctAnswer: option.id })}
+                  className="h-4 w-4 text-primary-600"
+                  aria-label={`Mark option ${option.id} as correct`}
+                />
+              )}
               <input
-                type="radio"
-                name="correctAnswer"
-                checked={form.correctAnswer === option.id}
-                onChange={() => setForm({ ...form, correctAnswer: option.id })}
-                className="h-4 w-4 text-primary-600"
-                aria-label={`Mark option ${option.id} as correct`}
+                type="text"
+                value={option.text}
+                onChange={(e) => {
+                  const newOptions = [...form.options];
+                  newOptions[idx] = { ...option, text: e.target.value };
+                  setForm({ ...form, options: newOptions });
+                }}
+                className="input-field flex-1"
+                placeholder={`Option ${option.id}`}
+                disabled={form.type === 'TRUE_FALSE'}
               />
-            )}
-            <input
-              type="text"
-              value={option.text}
-              onChange={(e) => {
-                const newOptions = [...form.options];
-                newOptions[idx] = { ...option, text: e.target.value };
-                setForm({ ...form, options: newOptions });
-              }}
-              className="input-field flex-1"
-              placeholder={`Option ${option.id}`}
-              disabled={form.type === 'TRUE_FALSE'}
-            />
-          </div>
-        ))}
+            </div>
+          );
+        })}
         {form.type === 'MCQ' && form.options.length < 4 && (
           <button
             onClick={() =>
@@ -418,10 +607,10 @@ function QuestionForm({
         </button>
         <button
           onClick={onSave}
-          disabled={!form.text.trim() || (form.type !== 'POLL' && !form.correctAnswer)}
+          disabled={!form.text.trim() || (form.type !== 'POLL' && !form.correctAnswer) || isUploading}
           className="btn-primary text-sm"
         >
-          {saveLabel}
+          {isUploading ? 'Uploading...' : saveLabel}
         </button>
       </div>
     </div>

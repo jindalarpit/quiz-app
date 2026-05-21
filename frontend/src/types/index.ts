@@ -117,6 +117,7 @@ export interface QuestionDisplay {
   type: QuestionType;
   timeLimit: number;
   serverTimestamp: number;
+  mediaUrl?: string;
 }
 
 export interface AnswerRevealData {

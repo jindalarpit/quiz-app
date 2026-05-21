@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import type { QuestionDisplay as QuestionDisplayType } from '@/types';
+import { QuestionImage } from './QuestionImage';
 
 const OPTION_COLORS = [
   'bg-quiz-red hover:bg-quiz-red/90 text-white',
@@ -32,6 +33,8 @@ export function QuestionDisplay({ question, selectedAnswer, onSelectAnswer, disa
           {question.text}
         </h2>
       </div>
+
+      {question.mediaUrl && <QuestionImage mediaUrl={question.mediaUrl} />}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {question.options.map((option, index) => {

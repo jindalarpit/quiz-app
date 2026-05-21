@@ -13,6 +13,12 @@ import type {
   SessionSummary,
 } from '@/types';
 
+export interface RevealLeaderboardEntry {
+  rank: number;
+  nickname: string;
+  score: number;
+}
+
 interface SessionStoreState {
   // Session info
   pin: string | null;
@@ -41,6 +47,9 @@ interface SessionStoreState {
   // Leaderboard animation state
   leaderboardAnimation: LeaderboardAnimationState;
 
+  // Fallback leaderboard from leaderboard.update top5 data
+  revealLeaderboard: RevealLeaderboardEntry[] | null;
+
   // Session end
   finalLeaderboard: LeaderboardEntry[];
   sessionSummary: SessionSummary | null;
@@ -63,6 +72,7 @@ interface SessionStoreState {
   setMyScore: (score: number) => void;
   setFinalLeaderboard: (entries: LeaderboardEntry[]) => void;
   setSessionSummary: (summary: SessionSummary) => void;
+  setRevealLeaderboard: (entries: RevealLeaderboardEntry[]) => void;
   resetQuestion: () => void;
   resetSession: () => void;
 
@@ -98,6 +108,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   myRank: null,
   myScore: null,
   leaderboardAnimation: { ...initialLeaderboardAnimationState },
+  revealLeaderboard: null,
   finalLeaderboard: [],
   sessionSummary: null,
 
@@ -123,6 +134,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   setMyScore: (score) => set({ myScore: score }),
   setFinalLeaderboard: (entries) => set({ finalLeaderboard: entries }),
   setSessionSummary: (summary) => set({ sessionSummary: summary }),
+  setRevealLeaderboard: (entries) => set({ revealLeaderboard: entries }),
   resetQuestion: () =>
     set({ currentQuestion: null, selectedAnswer: null, answerAcknowledged: false, timeRemaining: 0, revealData: null }),
   resetSession: () =>
@@ -142,6 +154,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       myRank: null,
       myScore: null,
       leaderboardAnimation: { ...initialLeaderboardAnimationState },
+      revealLeaderboard: null,
       finalLeaderboard: [],
       sessionSummary: null,
     }),

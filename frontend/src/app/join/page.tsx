@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { FormEvent, useCallback, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { AnimatedLeaderboard } from '@/components/AnimatedLeaderboard';
 import { AnswerReveal } from '@/components/quiz/AnswerReveal';
@@ -9,6 +10,7 @@ import { QuestionDisplay } from '@/components/quiz/QuestionDisplay';
 import { SessionEnd } from '@/components/quiz/SessionEnd';
 import { SpeedBonusIndicator } from '@/components/SpeedBonusIndicator';
 import { TimerDisplay } from '@/components/quiz/TimerDisplay';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { api } from '@/lib/api';
 import { buildParticipantDisplayView } from '@/lib/buildLeaderboardView';
 import { computeScoreBreakdown } from '@/lib/computeScoreBreakdown';
@@ -20,11 +22,13 @@ type JoinStep = 'pin' | 'nickname' | 'lobby' | 'playing';
 
 export default function JoinPage() {
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const [step, setStep] = useState<JoinStep>('pin');
-  const [pinInput, setPinInput] = useState('');
+  const [pinSlots, setPinSlots] = useState<string[]>(['', '', '', '', '', '']);
   const [nicknameInput, setNicknameInput] = useState('');
   const [error, setError] = useState('');
   const [wsEnabled, setWsEnabled] = useState(false);
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const {
     pin,
@@ -38,6 +42,7 @@ export default function JoinPage() {
     finalLeaderboard,
     sessionSummary,
     leaderboardAnimation,
+    revealLeaderboard,
     setPin,
     setParticipantId,
     setState,
@@ -52,7 +57,15 @@ export default function JoinPage() {
     resetSession,
     updateLeaderboardEntries,
     setRoundScoreBreakdown,
+    setRevealLeaderboard,
   } = useSessionStore();
+
+  // Focus first PIN slot on mount
+  useEffect(() => {
+    if (step === 'pin') {
+      pinInputRefs.current[0]?.focus();
+    }
+  }, [step]);
 
   const handleMessage = useCallback(
     (message: WSMessage) => {
@@ -86,9 +99,12 @@ export default function JoinPage() {
           break;
         }
         case 'leaderboard.update': {
-          const payload = message.payload as { yourRank?: number; yourScore?: number };
+          const payload = message.payload as { yourRank?: number; yourScore?: number; top5?: { rank: number; nickname: string; score: number }[] };
           if (payload.yourRank !== undefined) setMyRank(payload.yourRank);
           if (payload.yourScore !== undefined) setMyScore(payload.yourScore);
+          if (payload.top5 && payload.top5.length > 0) {
+            setRevealLeaderboard(payload.top5);
+          }
           break;
         }
         case 'leaderboard.updated': {
@@ -99,10 +115,8 @@ export default function JoinPage() {
             timestamp: number;
             entries: LeaderboardUpdateEntry[];
           };
-          // Update store with new entries (handles sequence validation and stores previous entries)
           const accepted = updateLeaderboardEntries(payload.entries, payload.sequenceNumber, payload.roundNumber);
           if (accepted && participantId) {
-            // Find the current participant's entry to compute score breakdown
             const myEntry = payload.entries.find((e) => e.participantId === participantId);
             const breakdown = computeScoreBreakdown(myEntry);
             setRoundScoreBreakdown(breakdown);
@@ -155,7 +169,7 @@ export default function JoinPage() {
           break;
       }
     },
-    [setState, setCurrentQuestion, setRevealData, setMyScore, setMyRank, setAnswerAcknowledged, setFinalLeaderboard, setSessionSummary, resetSession, updateLeaderboardEntries, setRoundScoreBreakdown, participantId]
+    [setState, setCurrentQuestion, setRevealData, setMyScore, setMyRank, setAnswerAcknowledged, setFinalLeaderboard, setSessionSummary, resetSession, updateLeaderboardEntries, setRoundScoreBreakdown, setRevealLeaderboard, participantId]
   );
 
   const { sendMessage } = useWebSocket({
@@ -165,10 +179,42 @@ export default function JoinPage() {
     enabled: wsEnabled && !!pin && !!participantId,
   });
 
+  // PIN slot handlers
+  const handlePinSlotChange = (index: number, value: string) => {
+    const char = value.toUpperCase().slice(-1);
+    const newSlots = [...pinSlots];
+    newSlots[index] = char;
+    setPinSlots(newSlots);
+
+    // Auto-advance to next slot
+    if (char && index < 5) {
+      pinInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePinSlotKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pinSlots[index] && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePinSlotPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').toUpperCase().slice(0, 6);
+    const newSlots = [...pinSlots];
+    for (let i = 0; i < 6; i++) {
+      newSlots[i] = pasted[i] || '';
+    }
+    setPinSlots(newSlots);
+    // Focus last filled slot or the next empty one
+    const lastIndex = Math.min(pasted.length, 5);
+    pinInputRefs.current[lastIndex]?.focus();
+  };
+
   const handlePinSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    const trimmed = pinInput.trim().toUpperCase();
+    const trimmed = pinSlots.join('').trim();
     if (trimmed.length !== 6) {
       setError('PIN must be 6 characters');
       return;
@@ -213,35 +259,77 @@ export default function JoinPage() {
     });
   };
 
+  // Animation variants
+  const fadeInUp = prefersReducedMotion
+    ? { initial: {}, animate: {}, transition: { duration: 0 } }
+    : {
+        initial: { opacity: 0, y: 20 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.4, ease: 'easeOut' },
+      };
+
+  const errorSlideIn = prefersReducedMotion
+    ? { initial: {}, animate: {}, exit: {}, transition: { duration: 0 } }
+    : {
+        initial: { opacity: 0, x: -20, height: 0 },
+        animate: { opacity: 1, x: 0, height: 'auto' },
+        exit: { opacity: 0, x: -20, height: 0 },
+        transition: { duration: 0.3, ease: 'easeOut' },
+      };
+
   // PIN input step
   if (step === 'pin') {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
-        <div className="w-full max-w-sm text-center">
+        <motion.div
+          className="w-full max-w-sm text-center"
+          {...fadeInUp}
+        >
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Join a Quiz</h1>
           <p className="mt-2 text-slate-600 dark:text-slate-400">Enter the game PIN shown on screen</p>
 
-          {error && (
-            <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-              {error}
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                key="pin-error"
+                {...errorSlideIn}
+                className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+              >
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form onSubmit={handlePinSubmit} className="mt-6">
-            <input
-              type="text"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.toUpperCase().slice(0, 6))}
-              className="input-field text-center text-3xl font-mono tracking-widest"
-              placeholder="______"
-              maxLength={6}
-              autoFocus
-            />
-            <button type="submit" className="btn-primary mt-4 w-full py-3 text-lg">
+            <div className="flex justify-center" style={{ gap: '10px' }}>
+              {pinSlots.map((slot, index) => (
+                <input
+                  key={index}
+                  ref={(el) => { pinInputRefs.current[index] = el; }}
+                  type="text"
+                  inputMode="text"
+                  value={slot}
+                  onChange={(e) => handlePinSlotChange(index, e.target.value)}
+                  onKeyDown={(e) => handlePinSlotKeyDown(index, e)}
+                  onPaste={index === 0 ? handlePinSlotPaste : undefined}
+                  className="w-12 h-14 text-center font-mono font-bold rounded-lg border border-slate-300 bg-white text-slate-900 transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                  style={{ fontSize: '24px' }}
+                  maxLength={1}
+                  aria-label={`PIN digit ${index + 1}`}
+                />
+              ))}
+            </div>
+            <button
+              type="submit"
+              className="mt-6 w-full py-3 text-lg font-semibold text-white rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hover:shadow-lg"
+              style={{
+                background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
+              }}
+            >
               Enter
             </button>
           </form>
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -250,40 +338,66 @@ export default function JoinPage() {
   if (step === 'nickname') {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Choose a Nickname</h1>
-          <p className="mt-2 text-slate-600 dark:text-slate-400">This is how others will see you</p>
-
-          {error && (
-            <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleNicknameSubmit} className="mt-6">
-            <input
-              type="text"
-              value={nicknameInput}
-              onChange={(e) => setNicknameInput(e.target.value)}
-              className="input-field text-center text-xl"
-              placeholder="Your nickname"
-              maxLength={20}
-              autoFocus
+        <motion.div
+          className="w-full max-w-sm"
+          {...fadeInUp}
+        >
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800" style={{ borderRadius: '16px' }}>
+            {/* Gradient accent element */}
+            <div
+              className="absolute top-0 left-0 right-0 h-1"
+              style={{ background: 'linear-gradient(90deg, #0ea5e9, #38bdf8, #7dd3fc)' }}
             />
-            <button type="submit" className="btn-primary mt-4 w-full py-3 text-lg">
-              Join
+
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Choose a Nickname</h1>
+              <p className="mt-2 text-slate-600 dark:text-slate-400">This is how others will see you</p>
+            </div>
+
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  key="nickname-error"
+                  {...errorSlideIn}
+                  className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form onSubmit={handleNicknameSubmit} className="mt-6">
+              <input
+                type="text"
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                className="input-field text-center text-xl"
+                placeholder="Your nickname"
+                maxLength={20}
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="mt-4 w-full py-3 text-lg font-semibold text-white rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hover:shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
+                }}
+              >
+                Join
+              </button>
+            </form>
+            <button
+              onClick={() => {
+                setStep('pin');
+                setError('');
+                setPinSlots(['', '', '', '', '', '']);
+              }}
+              className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              ← Back
             </button>
-          </form>
-          <button
-            onClick={() => {
-              setStep('pin');
-              setError('');
-            }}
-            className="mt-4 text-sm text-slate-500 hover:text-slate-700"
-          >
-            ← Back
-          </button>
-        </div>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -292,14 +406,27 @@ export default function JoinPage() {
   if (step === 'lobby') {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4">
-        <div className="text-center">
-          <div className="mx-auto h-16 w-16 animate-pulse rounded-full bg-primary-100 dark:bg-primary-900" />
+        <motion.div
+          className="text-center"
+          {...fadeInUp}
+        >
+          {/* Animated pulsing indicator */}
+          <div className="relative mx-auto h-16 w-16">
+            <div
+              className={`absolute inset-0 rounded-full bg-primary-400/30 ${prefersReducedMotion ? '' : 'animate-ping'}`}
+            />
+            <div
+              className={`relative h-16 w-16 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 ${prefersReducedMotion ? '' : 'animate-pulse'}`}
+            />
+          </div>
           <h1 className="mt-6 text-2xl font-bold text-slate-900 dark:text-white">You&apos;re in!</h1>
           <p className="mt-2 text-lg text-slate-600 dark:text-slate-400">
             Waiting for the host to start the quiz...
           </p>
-          <p className="mt-4 text-sm text-slate-500">Game PIN: {pin}</p>
-        </div>
+          <p className="mt-4 font-semibold text-slate-700 dark:text-slate-300" style={{ fontSize: '18px' }}>
+            Game PIN: <span className="font-mono">{pin}</span>
+          </p>
+        </motion.div>
       </div>
     );
   }
@@ -314,7 +441,7 @@ export default function JoinPage() {
           resetSession();
           setStep('pin');
           setWsEnabled(false);
-          setPinInput('');
+          setPinSlots(['', '', '', '', '', '']);
           setNicknameInput('');
           router.push('/join');
         }}
@@ -372,7 +499,6 @@ export default function JoinPage() {
             options={currentQuestion?.options || []}
             selectedAnswer={selectedAnswer}
           />
-          {/* Speed bonus indicator for participant's score breakdown */}
           {leaderboardAnimation.roundScoreBreakdown && (
             <div className="mt-4">
               <SpeedBonusIndicator
@@ -393,7 +519,6 @@ export default function JoinPage() {
               <p className="text-sm text-slate-500">Total: {myScore}</p>
             </div>
           )}
-          {/* Animated leaderboard showing participant's context view */}
           {leaderboardAnimation.currentEntries.length > 0 && participantId && (
             <div className="mt-4">
               <AnimatedLeaderboard
@@ -403,6 +528,29 @@ export default function JoinPage() {
                 roundNumber={leaderboardAnimation.roundNumber}
                 animationPhase={leaderboardAnimation.animationPhase}
               />
+            </div>
+          )}
+          {leaderboardAnimation.currentEntries.length === 0 && revealLeaderboard && revealLeaderboard.length > 0 && (
+            <div className="mt-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <h3 className="mb-3 text-center text-lg font-semibold text-slate-900 dark:text-white">Leaderboard</h3>
+                <div className="space-y-2">
+                  {revealLeaderboard.map((entry) => (
+                    <div
+                      key={`${entry.rank}-${entry.nickname}`}
+                      className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-700/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                          {entry.rank}
+                        </span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{entry.nickname}</span>
+                      </div>
+                      <span className="font-semibold text-slate-900 dark:text-white">{entry.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
