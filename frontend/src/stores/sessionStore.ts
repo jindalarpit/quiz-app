@@ -54,6 +54,11 @@ interface SessionStoreState {
   finalLeaderboard: LeaderboardEntry[];
   sessionSummary: SessionSummary | null;
 
+  // Auto mode state
+  autoModeEnabled: boolean;
+  leaderboardDelay: number;
+  autoAdvanceCountdown: number | null;
+
   // Actions
   setPin: (pin: string) => void;
   setState: (state: SessionState) => void;
@@ -75,6 +80,13 @@ interface SessionStoreState {
   setRevealLeaderboard: (entries: RevealLeaderboardEntry[]) => void;
   resetQuestion: () => void;
   resetSession: () => void;
+
+  // Auto mode actions
+  setAutoModeEnabled: (enabled: boolean) => void;
+  setLeaderboardDelay: (seconds: number) => boolean;
+  setAutoAdvanceCountdown: (remaining: number | null) => void;
+  persistAutoModeToLocalStorage: () => void;
+  restoreAutoModeFromLocalStorage: () => void;
 
   // Leaderboard animation actions
   updateLeaderboardEntries: (entries: LeaderboardUpdateEntry[], sequenceNumber: number, roundNumber?: number) => boolean;
@@ -111,6 +123,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   revealLeaderboard: null,
   finalLeaderboard: [],
   sessionSummary: null,
+
+  // Auto mode state
+  autoModeEnabled: false,
+  leaderboardDelay: 3,
+  autoAdvanceCountdown: null,
 
   setPin: (pin) => set({ pin }),
   setState: (state) => set({ state }),
@@ -157,7 +174,62 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       revealLeaderboard: null,
       finalLeaderboard: [],
       sessionSummary: null,
+      autoModeEnabled: false,
+      leaderboardDelay: 3,
+      autoAdvanceCountdown: null,
     }),
+
+  // Auto mode actions
+  setAutoModeEnabled: (enabled) => {
+    set({ autoModeEnabled: enabled });
+    get().persistAutoModeToLocalStorage();
+  },
+
+  setLeaderboardDelay: (seconds) => {
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 30) {
+      return false;
+    }
+    set({ leaderboardDelay: seconds });
+    get().persistAutoModeToLocalStorage();
+    return true;
+  },
+
+  setAutoAdvanceCountdown: (remaining) => set({ autoAdvanceCountdown: remaining }),
+
+  persistAutoModeToLocalStorage: () => {
+    const { pin, autoModeEnabled, leaderboardDelay } = get();
+    if (!pin) return;
+    try {
+      const data = {
+        enabled: autoModeEnabled,
+        leaderboardDelay,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(`quiz-auto-mode-${pin}`, JSON.stringify(data));
+    } catch (error) {
+      console.warn('Failed to persist auto-mode settings to localStorage:', error);
+    }
+  },
+
+  restoreAutoModeFromLocalStorage: () => {
+    const { pin } = get();
+    if (!pin) return;
+    try {
+      const raw = localStorage.getItem(`quiz-auto-mode-${pin}`);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (typeof data.enabled === 'boolean' && typeof data.leaderboardDelay === 'number') {
+        set({
+          autoModeEnabled: data.enabled,
+          leaderboardDelay: Number.isInteger(data.leaderboardDelay) && data.leaderboardDelay >= 1 && data.leaderboardDelay <= 30
+            ? data.leaderboardDelay
+            : 3,
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to restore auto-mode settings from localStorage:', error);
+    }
+  },
 
   // Leaderboard animation actions
   updateLeaderboardEntries: (entries, sequenceNumber, roundNumber) => {

@@ -6,10 +6,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AnimatedLeaderboard } from '@/components/AnimatedLeaderboard';
 import { AnswerReveal } from '@/components/quiz/AnswerReveal';
+import { AutoAdvanceCountdown } from '@/components/quiz/AutoAdvanceCountdown';
+import { AutoModeControls } from '@/components/quiz/AutoModeControls';
 import { Leaderboard } from '@/components/quiz/Leaderboard';
 import { QuestionDisplay } from '@/components/quiz/QuestionDisplay';
 import { SessionEnd } from '@/components/quiz/SessionEnd';
 import { TimerDisplay } from '@/components/quiz/TimerDisplay';
+import { useAutoAdvance } from '@/hooks/useAutoAdvance';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { api } from '@/lib/api';
 import { buildHostView } from '@/lib/buildLeaderboardView';
@@ -43,7 +46,10 @@ export default function HostSessionPage() {
     finalLeaderboard,
     sessionSummary,
     leaderboardAnimation,
+    autoModeEnabled,
+    leaderboardDelay,
     setState,
+    setPin,
     addParticipant,
     setParticipantCount,
     setCurrentQuestion,
@@ -53,6 +59,9 @@ export default function HostSessionPage() {
     setSessionSummary,
     resetSession,
     updateLeaderboardEntries,
+    setAutoModeEnabled,
+    setLeaderboardDelay,
+    restoreAutoModeFromLocalStorage,
   } = useSessionStore();
 
   const questionInfoRef = useRef({ questionNumber: 0, totalQuestions: 0 });
@@ -182,6 +191,22 @@ export default function HostSessionPage() {
     };
   }, [setState, resetSession, pin]);
 
+  // Restore auto mode settings from localStorage on mount
+  useEffect(() => {
+    setPin(pin);
+    restoreAutoModeFromLocalStorage();
+  }, [pin, setPin, restoreAutoModeFromLocalStorage]);
+
+  // Auto-advance hook: manages countdown during REVEAL state
+  const { countdown, cancel: cancelAutoAdvance, isActive: autoAdvanceActive } = useAutoAdvance({
+    enabled: autoModeEnabled,
+    delaySeconds: leaderboardDelay,
+    isLastQuestion: questionInfoRef.current.totalQuestions > 0 && questionInfoRef.current.questionNumber >= questionInfoRef.current.totalQuestions,
+    sessionState: state || '',
+    isPaused: state === 'PAUSED',
+    pin,
+  });
+
   const handleStartQuiz = async () => {
     try {
       await api.post(`/api/sessions/${pin}/next`);
@@ -193,10 +218,12 @@ export default function HostSessionPage() {
   };
 
   const handleNextQuestion = async () => {
+    cancelAutoAdvance();
     await api.post(`/api/sessions/${pin}/next`);
   };
 
   const handleEndSession = async () => {
+    cancelAutoAdvance();
     await api.post(`/api/sessions/${pin}/end`);
   };
 
@@ -253,6 +280,15 @@ export default function HostSessionPage() {
               </div>
             </div>
 
+            <div className="mt-8 w-full max-w-md">
+              <AutoModeControls
+                enabled={autoModeEnabled}
+                leaderboardDelay={leaderboardDelay}
+                onToggle={setAutoModeEnabled}
+                onDelayChange={setLeaderboardDelay}
+              />
+            </div>
+
             <div className="mt-8 flex gap-4">
               <button
                 onClick={handleStartQuiz}
@@ -297,6 +333,8 @@ export default function HostSessionPage() {
                 <TimerDisplay
                   timeLimit={currentQuestion.timeLimit}
                   serverTimestamp={currentQuestion.serverTimestamp}
+                  questionId={currentQuestion.questionId}
+                  sessionState={state}
                   onExpire={() => {
                     api.post(`/api/sessions/${pin}/skip`).catch(() => {});
                   }}
@@ -343,6 +381,15 @@ export default function HostSessionPage() {
                 ) : (
                   <Leaderboard entries={leaderboard} />
                 )}
+                {autoAdvanceActive && countdown !== null && (
+                  <div className="mt-6 flex justify-center">
+                    <AutoAdvanceCountdown
+                      totalSeconds={leaderboardDelay}
+                      remainingSeconds={countdown}
+                      onCancel={cancelAutoAdvance}
+                    />
+                  </div>
+                )}
                 <div className="mt-6 text-center">
                   {questionInfoRef.current.totalQuestions === 0 || questionInfoRef.current.questionNumber < questionInfoRef.current.totalQuestions ? (
                     <button
@@ -376,6 +423,16 @@ export default function HostSessionPage() {
               >
                 End Session
               </button>
+            </div>
+
+            <div className="fixed top-4 right-4 z-10">
+              <AutoModeControls
+                enabled={autoModeEnabled}
+                leaderboardDelay={leaderboardDelay}
+                onToggle={setAutoModeEnabled}
+                onDelayChange={setLeaderboardDelay}
+                compact
+              />
             </div>
           </div>
         )}

@@ -295,7 +295,7 @@ public class RedisSessionService {
     /**
      * Update the leaderboard score for a participant using ZINCRBY.
      */
-    public void incrementLeaderboardScore(String pin, String participantId, int scoreToAdd) {
+    public void incrementLeaderboardScore(String pin, String participantId, long scoreToAdd) {
         String key = leaderboardKey(pin);
         redisTemplate.opsForZSet().incrementScore(key, participantId, scoreToAdd);
         redisTemplate.expire(key, Duration.ofSeconds(SESSION_TTL_SECONDS));

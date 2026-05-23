@@ -466,7 +466,7 @@ export default function JoinPage() {
     <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4">
       {currentQuestion && state === 'QUESTION_OPEN' && (
         <div className="w-full max-w-lg">
-          <TimerDisplay timeLimit={currentQuestion.timeLimit} serverTimestamp={currentQuestion.serverTimestamp} />
+          <TimerDisplay timeLimit={currentQuestion.timeLimit} serverTimestamp={currentQuestion.serverTimestamp} questionId={currentQuestion.questionId} sessionState={state} />
           <QuestionDisplay
             question={currentQuestion}
             selectedAnswer={selectedAnswer}

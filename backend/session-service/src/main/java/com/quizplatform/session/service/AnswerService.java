@@ -141,7 +141,10 @@ public class AnswerService {
 
         // 8. Update leaderboard if score > 0
         if (score > 0) {
-            redisSessionService.incrementLeaderboardScore(pin, request.getParticipantId(), score);
+            // Multiply by SCORE_MULTIPLIER to match composite score encoding
+            // (composite = cumulativeScore × SCORE_MULTIPLIER + tiebreaker)
+            long scoreIncrement = (long) score * RankingService.SCORE_MULTIPLIER;
+            redisSessionService.incrementLeaderboardScore(pin, request.getParticipantId(), scoreIncrement);
         }
 
         // Store last answer time for tie-breaking

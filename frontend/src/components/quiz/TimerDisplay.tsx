@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -9,6 +9,10 @@ interface TimerDisplayProps {
   timeLimit: number;
   /** Server timestamp (epoch ms) when the question started */
   serverTimestamp: number;
+  /** Unique ID for the current question — resets the expiry guard when it changes */
+  questionId: string;
+  /** Current session state — onExpire only fires when this equals 'QUESTION_OPEN' */
+  sessionState: string;
   /** Function to get estimated server time (from TimerSync). Falls back to Date.now() if not provided. */
   getServerTime?: () => number;
   /** Callback fired once when the timer reaches zero */
@@ -22,11 +26,22 @@ const NORMAL_INTERVAL_MS = 1000;
 /** High-frequency update interval in ms (final 3 seconds) */
 const URGENT_INTERVAL_MS = 100;
 
-export function TimerDisplay({ timeLimit, serverTimestamp, getServerTime, onExpire }: TimerDisplayProps) {
+export function TimerDisplay({ timeLimit, serverTimestamp, questionId, sessionState, getServerTime, onExpire }: TimerDisplayProps) {
   const [remaining, setRemaining] = useState(timeLimit);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIntervalMs = useRef<number>(NORMAL_INTERVAL_MS);
   const expiredRef = useRef(false);
+  const prevQuestionIdRef = useRef(questionId);
+
+  // Reset expiredRef when questionId changes so each question gets a fresh guard
+  if (prevQuestionIdRef.current !== questionId) {
+    prevQuestionIdRef.current = questionId;
+    expiredRef.current = false;
+  }
+
+  // Keep a ref to sessionState so the interval callback always sees the latest value
+  const sessionStateRef = useRef(sessionState);
+  sessionStateRef.current = sessionState;
 
   const getCurrentServerTime = useCallback((): number => {
     return getServerTime ? getServerTime() : Date.now();
@@ -64,7 +79,7 @@ export function TimerDisplay({ timeLimit, serverTimestamp, getServerTime, onExpi
       if (currentLeft <= 0 && intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
-        if (!expiredRef.current && onExpire) {
+        if (!expiredRef.current && onExpire && sessionStateRef.current === 'QUESTION_OPEN') {
           expiredRef.current = true;
           onExpire();
         }

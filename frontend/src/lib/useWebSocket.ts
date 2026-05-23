@@ -18,6 +18,37 @@ interface UseWebSocketOptions {
   enabled?: boolean;
 }
 
+/**
+ * Attempt to refresh the access token using the refresh token stored in localStorage.
+ * Returns the new access token or null if refresh failed.
+ */
+async function refreshToken(): Promise<string | null> {
+  try {
+    const stored = localStorage.getItem('auth-storage');
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    const refreshToken = parsed?.state?.tokens?.refreshToken;
+    if (!refreshToken) return null;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const response = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    // Update localStorage with new tokens
+    parsed.state.tokens = { accessToken: data.accessToken, refreshToken: data.refreshToken };
+    localStorage.setItem('auth-storage', JSON.stringify(parsed));
+    return data.accessToken;
+  } catch {
+    return null;
+  }
+}
+
 const MAX_RECONNECT_ATTEMPTS = 10;
 const MAX_BACKOFF_MS = 30000;
 
@@ -91,7 +122,7 @@ export function useWebSocket({
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback((tokenOverride?: string) => {
     if (!enabled || !pin) return;
 
     cleanup();
@@ -102,7 +133,8 @@ export function useWebSocket({
 
     let url = `${wsProtocol}//${wsHost}/ws/${pin}`;
     const params = new URLSearchParams();
-    if (token) params.set('token', token);
+    const effectiveToken = tokenOverride || token;
+    if (effectiveToken) params.set('token', effectiveToken);
     if (participantId) params.set('participantId', participantId);
     const queryString = params.toString();
     if (queryString) url += `?${queryString}`;
@@ -148,12 +180,20 @@ export function useWebSocket({
 
       onDisconnectRef.current?.();
 
-      // Attempt reconnection
+      // Attempt reconnection with token refresh
       if (reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS && enabled) {
         setConnectionState('reconnecting');
         const delay = getBackoffDelay(reconnectAttemptRef.current);
         reconnectAttemptRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = setTimeout(async () => {
+          // If we have a token (host connection), try refreshing it before reconnecting
+          if (token && !participantId) {
+            const newToken = await refreshToken();
+            if (newToken) {
+              connect(newToken);
+              return;
+            }
+          }
           connect();
         }, delay);
       } else {
