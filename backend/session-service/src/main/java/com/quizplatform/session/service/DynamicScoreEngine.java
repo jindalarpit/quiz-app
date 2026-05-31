@@ -196,6 +196,12 @@ public class DynamicScoreEngine {
             } catch (Exception e) {
                 log.error("Failed to broadcast leaderboard update for session {}: {}", pin, e.getMessage());
             }
+
+            try {
+                leaderboardBroadcaster.publishScoreEvent(pin, result);
+            } catch (Exception e) {
+                log.error("Failed to publish score event for session {}: {}", pin, e.getMessage());
+            }
         }
 
         return result;
@@ -312,21 +318,13 @@ public class DynamicScoreEngine {
         String leaderboardKey = leaderboardKey(pin);
 
         for (ParticipantRoundScore score : participantScores) {
-            if (score.getRoundScore() > 0) {
-                // Use ZINCRBY for atomic score increment
-                // Multiply by SCORE_MULTIPLIER since the sorted set uses composite scores
-                redisTemplate.opsForZSet().incrementScore(
-                        leaderboardKey, score.getParticipantId(),
-                        (double) score.getRoundScore() * RankingService.SCORE_MULTIPLIER);
-            }
-
-            // Update the cumulative score in the DTO
-            int newCumulativeScore = getCumulativeScore(pin, score.getParticipantId());
-            score.setCumulativeScore(newCumulativeScore);
+            // Read the cumulative score (already incremented by AnswerService at submission time)
+            int cumulativeScore = getCumulativeScore(pin, score.getParticipantId());
+            score.setCumulativeScore(cumulativeScore);
 
             // Update leaderboard with composite score for proper ranking (includes tiebreaker)
             rankingService.updateLeaderboardWithCompositeScore(
-                    pin, score.getParticipantId(), newCumulativeScore);
+                    pin, score.getParticipantId(), cumulativeScore);
         }
 
         // Ensure TTL is maintained

@@ -43,6 +43,10 @@ export function TimerDisplay({ timeLimit, serverTimestamp, questionId, sessionSt
   const sessionStateRef = useRef(sessionState);
   sessionStateRef.current = sessionState;
 
+  // Keep a stable ref to onExpire so the interval callback always sees the latest
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+
   const getCurrentServerTime = useCallback((): number => {
     return getServerTime ? getServerTime() : Date.now();
   }, [getServerTime]);
@@ -59,11 +63,18 @@ export function TimerDisplay({ timeLimit, serverTimestamp, questionId, sessionSt
     // Initial update
     const left = updateTimer();
 
-    // Determine initial interval based on remaining time
-    const initialInterval = left <= URGENT_THRESHOLD_SECONDS ? URGENT_INTERVAL_MS : NORMAL_INTERVAL_MS;
-    currentIntervalMs.current = initialInterval;
+    const checkExpiry = (currentLeft: number) => {
+      if (currentLeft <= 0 && !expiredRef.current && onExpireRef.current && sessionStateRef.current === 'QUESTION_OPEN') {
+        expiredRef.current = true;
+        onExpireRef.current();
+      }
+    };
 
-    intervalRef.current = setInterval(() => {
+    // Check immediately if already expired
+    checkExpiry(left);
+    if (left <= 0) return;
+
+    const tick = () => {
       const currentLeft = updateTimer();
 
       // Switch to high-frequency updates when entering final 3 seconds
@@ -72,19 +83,23 @@ export function TimerDisplay({ timeLimit, serverTimestamp, questionId, sessionSt
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
         }
-        intervalRef.current = setInterval(updateTimer, URGENT_INTERVAL_MS);
+        intervalRef.current = setInterval(tick, URGENT_INTERVAL_MS);
       }
 
       // Stop when timer reaches 0
-      if (currentLeft <= 0 && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-        if (!expiredRef.current && onExpire && sessionStateRef.current === 'QUESTION_OPEN') {
-          expiredRef.current = true;
-          onExpire();
+      if (currentLeft <= 0) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
+        checkExpiry(currentLeft);
       }
-    }, initialInterval);
+    };
+
+    // Determine initial interval based on remaining time
+    const initialInterval = left <= URGENT_THRESHOLD_SECONDS ? URGENT_INTERVAL_MS : NORMAL_INTERVAL_MS;
+    currentIntervalMs.current = initialInterval;
+    intervalRef.current = setInterval(tick, initialInterval);
 
     return () => {
       if (intervalRef.current) {

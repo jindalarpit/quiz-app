@@ -82,7 +82,7 @@ public class QuizHistoryService {
         }
 
         // Count total matching sessions
-        String countSql = "SELECT COUNT(*) FROM session.sessions s " + whereClause;
+        String countSql = "SELECT COUNT(*) FROM quiz.sessions s " + whereClause;
         Long totalSessions = jdbcTemplate.queryForObject(countSql, Long.class, params.toArray());
         if (totalSessions == null) {
             totalSessions = 0L;
@@ -95,7 +95,7 @@ public class QuizHistoryService {
         // Fetch paginated results
         String querySql = "SELECT s.id, s.quiz_title, s.ended_at, s.participant_count, " +
                 "EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) AS duration_seconds " +
-                "FROM session.sessions s " + whereClause +
+                "FROM quiz.sessions s " + whereClause +
                 " ORDER BY s.ended_at DESC LIMIT ? OFFSET ?";
 
         List<Object> queryParams = new ArrayList<>(params);
@@ -127,7 +127,7 @@ public class QuizHistoryService {
     @Transactional(readOnly = true)
     public List<LeaderboardEntryDTO> getHistoricalLeaderboard(UUID sessionId, UUID hostId) {
         // Verify session exists and belongs to the host
-        String verifyQuery = "SELECT COUNT(*) FROM session.sessions " +
+        String verifyQuery = "SELECT COUNT(*) FROM quiz.sessions " +
                 "WHERE id = ? AND host_id = ? AND status = 'ENDED'";
         Integer count = jdbcTemplate.queryForObject(verifyQuery, Integer.class, sessionId, hostId);
 
@@ -138,7 +138,7 @@ public class QuizHistoryService {
         // Retrieve leaderboard entries ordered by rank
         String leaderboardQuery = "SELECT sp.final_rank, sp.nickname, sp.final_score, " +
                 "sp.answers_correct, sp.answers_total, sp.max_streak, sp.avg_response_time_ms " +
-                "FROM session.session_participants sp " +
+                "FROM quiz.session_participants sp " +
                 "WHERE sp.session_id = ? AND sp.final_rank IS NOT NULL " +
                 "ORDER BY sp.final_rank ASC";
 

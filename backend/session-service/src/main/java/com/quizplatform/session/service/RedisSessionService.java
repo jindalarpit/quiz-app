@@ -128,6 +128,13 @@ public class RedisSessionService {
     }
 
     /**
+     * Set a single field in the session hash.
+     */
+    public void setSessionField(String pin, String field, String value) {
+        redisTemplate.opsForHash().put(sessionKey(pin), field, value);
+    }
+
+    /**
      * Store the previous state before pausing.
      */
     public void storePreviousState(String pin, String previousState) {

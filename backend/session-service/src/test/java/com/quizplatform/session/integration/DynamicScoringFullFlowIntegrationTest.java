@@ -67,7 +67,7 @@ class DynamicScoringFullFlowIntegrationTest {
         meterRegistry = new SimpleMeterRegistry();
         scoreCalculator = new ScoreCalculator(); // Real ScoreCalculator
         objectMapper = new ObjectMapper();
-        broadcaster = new LeaderboardBroadcasterImpl(redisTemplate, objectMapper);
+        broadcaster = new LeaderboardBroadcasterImpl(redisTemplate, objectMapper, null);
         engine = new DynamicScoreEngine(redisTemplate, scoreCalculator, rankingService, meterRegistry);
         engine.setLeaderboardSnapshotService(snapshotService);
         engine.setLeaderboardBroadcaster(broadcaster);

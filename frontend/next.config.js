@@ -64,6 +64,18 @@ const nextConfig = {
         destination: 'http://localhost:8083/api/analytics/:path*',
       },
       {
+        source: '/api/history/:path*',
+        destination: 'http://localhost:8083/api/history/:path*',
+      },
+      {
+        source: '/api/history',
+        destination: 'http://localhost:8083/api/history',
+      },
+      {
+        source: '/api/export/:path*',
+        destination: 'http://localhost:8083/api/export/:path*',
+      },
+      {
         source: '/ws/:path*',
         destination: 'http://localhost:8084/ws/:path*',
       },

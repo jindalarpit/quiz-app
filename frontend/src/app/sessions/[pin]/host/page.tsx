@@ -197,6 +197,15 @@ export default function HostSessionPage() {
     restoreAutoModeFromLocalStorage();
   }, [pin, setPin, restoreAutoModeFromLocalStorage]);
 
+  // Auto-reveal: when question closes (timer expired or skipped), automatically reveal the answer
+  useEffect(() => {
+    if (state === 'QUESTION_CLOSED') {
+      api.post(`/api/sessions/${pin}/reveal`).catch((err) => {
+        console.error('Auto-reveal failed:', err);
+      });
+    }
+  }, [state, pin]);
+
   // Auto-advance hook: manages countdown during REVEAL state
   const { countdown, cancel: cancelAutoAdvance, isActive: autoAdvanceActive } = useAutoAdvance({
     enabled: autoModeEnabled,
@@ -356,14 +365,7 @@ export default function HostSessionPage() {
             {state === 'QUESTION_CLOSED' && currentQuestion && (
               <div className="text-center">
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">Time&apos;s up!</p>
-                <button
-                  onClick={() => api.post(`/api/sessions/${pin}/reveal`)}
-                  disabled={isTransitioning}
-                  className="btn-primary mt-4"
-                  aria-disabled={isTransitioning}
-                >
-                  Reveal Answer
-                </button>
+                <p className="mt-2 text-slate-600 dark:text-slate-400">Processing results...</p>
               </div>
             )}
 

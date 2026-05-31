@@ -48,7 +48,7 @@ class LeaderboardBroadcasterImplTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         lenient().when(redisTemplate.opsForList()).thenReturn(listOperations);
-        broadcaster = new LeaderboardBroadcasterImpl(redisTemplate, objectMapper);
+        broadcaster = new LeaderboardBroadcasterImpl(redisTemplate, objectMapper, null);
     }
 
     @Nested

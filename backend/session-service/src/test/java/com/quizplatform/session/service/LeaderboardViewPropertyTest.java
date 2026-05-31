@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LeaderboardViewPropertyTest {
 
     private final LeaderboardBroadcasterImpl broadcaster =
-            new LeaderboardBroadcasterImpl(null, new ObjectMapper());
+            new LeaderboardBroadcasterImpl(null, new ObjectMapper(), null);
 
     // ==================== Property 8: Host View ====================
 

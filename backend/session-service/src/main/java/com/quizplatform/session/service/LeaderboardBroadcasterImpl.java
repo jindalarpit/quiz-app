@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.quizplatform.session.dto.ParticipantRoundScore;
 import com.quizplatform.session.dto.RoundResult;
+import com.quizplatform.session.dto.ScoreAwardedEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -45,6 +48,10 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+
+    @Value("${kafka.topics.score-awarded:score.awarded}")
+    private String scoreAwardedTopic;
 
     /**
      * Per-session sequence number counters.
@@ -56,9 +63,11 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
 
     public LeaderboardBroadcasterImpl(
             StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            KafkaTemplate<String, String> kafkaTemplate) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @Override
@@ -89,10 +98,42 @@ public class LeaderboardBroadcasterImpl implements LeaderboardBroadcaster {
 
     @Override
     public void publishScoreEvent(String pin, RoundResult result) {
-        // Kafka publishing will be fully implemented when Kafka
-        // dependency is added (Task 5.3). For now, log the intent.
-        log.info("Score event publish requested: pin={}, round={}",
+        log.info("Publishing score.awarded event: pin={}, round={}",
                 pin, result.getRoundNumber());
+
+        List<ScoreAwardedEvent.ScoreAwardedEntry> entries = result.getParticipantScores().stream()
+                .map(score -> ScoreAwardedEvent.ScoreAwardedEntry.builder()
+                        .participantId(score.getParticipantId())
+                        .roundScore(score.getRoundScore())
+                        .cumulativeScore(score.getCumulativeScore())
+                        .rank(score.getRank())
+                        .rankDelta(score.getRankDelta())
+                        .streakCount(score.getStreakCount())
+                        .streakMultiplier(score.getStreakMultiplier())
+                        .timeTakenMs(score.getTimeTakenMs())
+                        .isCorrect(score.isCorrect())
+                        .build())
+                .collect(Collectors.toList());
+
+        ScoreAwardedEvent event = ScoreAwardedEvent.builder()
+                .sessionId(pin)
+                .roundNumber(result.getRoundNumber())
+                .timestamp(result.getTimestamp().toEpochMilli())
+                .entries(entries)
+                .build();
+
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+            kafkaTemplate.send(scoreAwardedTopic, pin, payload);
+            log.debug("Published score.awarded event to Kafka: pin={}, round={}, entries={}",
+                    pin, result.getRoundNumber(), entries.size());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize score.awarded event: pin={}, error={}",
+                    pin, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to publish score.awarded event to Kafka: pin={}, error={}",
+                    pin, e.getMessage());
+        }
     }
 
     /**

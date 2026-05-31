@@ -52,6 +52,32 @@ services:
     networks:
       - quiz-network
 
+  kafka:
+    image: docker.io/apache/kafka:3.7.0
+    container_name: quiz-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: quiz-platform-kafka-cluster-01
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - quiz-network
+
   # ============================================================
   # APPLICATION SERVICES
   # ============================================================
@@ -122,11 +148,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: quiz_dev_password
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       QUIZ_SERVICE_URL: http://quiz-service:8081
     depends_on:
       postgresql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"]
@@ -161,6 +190,41 @@ services:
     networks:
       - quiz-network
 
+  analytics-service:
+    build:
+      context: ./backend/analytics-service
+      dockerfile: Dockerfile
+    container_name: quiz-analytics-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/quizplatform
+      SPRING_DATASOURCE_USERNAME: quiz
+      SPRING_DATASOURCE_PASSWORD: quiz_dev_password
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SESSION_SERVICE_URL: http://session-service:8082
+      QUIZ_SERVICE_URL: http://quiz-service:8081
+      AUTH_SERVICE_URL: http://auth-service:8080
+      JWT_SECRET: dev-secret-key-change-in-production-min-32-chars
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - quiz-network
+
   api-gateway:
     build:
       context: ./backend/api-gateway
@@ -183,6 +247,7 @@ services:
       - quiz-service
       - session-service
       - websocket-service
+      - analytics-service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health || exit 1"]
       interval: 10s

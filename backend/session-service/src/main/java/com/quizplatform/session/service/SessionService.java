@@ -91,11 +91,17 @@ public class SessionService {
 
         Map<String, Object> settings = request.getSettings();
 
-        // Load scoring mode from quiz configuration (Requirement 7.7)
+        // Load scoring mode and quiz title from quiz configuration (Requirement 7.7)
         // The scoring mode is fixed for the entire session duration
         String scoringMode = loadScoringModeFromQuiz(request.getQuizId());
+        String quizTitle = loadQuizTitle(request.getQuizId());
 
         redisSessionService.createSession(pin, request.getQuizId(), hostId, settings, scoringMode);
+
+        // Store quiz title in Redis for later persistence
+        if (quizTitle != null) {
+            redisSessionService.setSessionField(pin, "quiz_title", quizTitle);
+        }
 
         UUID sessionId = UUID.randomUUID();
         Instant now = Instant.now();
@@ -132,6 +138,18 @@ public class SessionService {
                     quizId, e.getMessage());
         }
         return "SPEED_MATTERS";
+    }
+
+    private String loadQuizTitle(UUID quizId) {
+        try {
+            com.quizplatform.common.dto.QuizDTO quiz = quizServiceClient.getQuiz(quizId);
+            if (quiz != null && quiz.getTitle() != null) {
+                return quiz.getTitle();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load quiz title for quiz {}: {}", quizId, e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -428,8 +446,12 @@ public class SessionService {
                 return null;
             }
 
+            // Try to get quiz title from Redis (stored at session creation) or leave null
+            String quizTitle = fields.get("quiz_title") != null ? fields.get("quiz_title").toString() : null;
+
             Session session = Session.builder()
                     .quizId(UUID.fromString(fields.get("quiz_id").toString()))
+                    .quizTitle(quizTitle)
                     .hostId(UUID.fromString(fields.get("host_id").toString()))
                     .pin(pin)
                     .status(SessionStatus.ENDED)
